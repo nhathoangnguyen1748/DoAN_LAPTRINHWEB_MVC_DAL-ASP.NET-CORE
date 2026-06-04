@@ -1,0 +1,690 @@
+﻿@{
+    ViewData["Title"] = "Database Designer";
+}
+
+<section class="designer-shell">
+    <aside class="designer-panel designer-sidebar">
+        <div class="brand-block">
+            <span class="brand-mark">DB</span>
+            <div>
+                <p class="section-kicker">ASP.NET MVC Builder</p>
+                <h1>Database Designer</h1>
+                <p>Design schema first, review relationships with AI, then export ASP.NET Core MVC + SQL Server source.</p>
+            </div>
+        </div>
+
+        <label class="field-label" for="projectName">Project name</label>
+        <input id="projectName" class="text-input" value="GeneratedMvcApp" />
+
+        <div class="sql-card">
+            <div class="panel-title-row">
+                <div>
+                    <p class="section-kicker">SQL Import</p>
+                    <h2>Import database structure</h2>
+                </div>
+                <span id="sqlStats" class="soft-pill">0 tables</span>
+            </div>
+            <textarea id="sqlInput" class="sql-input" spellcheck="false" placeholder="Paste CREATE TABLE statements here..."></textarea>
+            <button id="importSqlBtn" class="btn btn-primary" type="button">Import SQL</button>
+        </div>
+
+        <div class="action-grid">
+            <button id="addTableBtn" class="btn btn-light" type="button">Add table</button>
+            <button id="reviewBtn" class="btn btn-ai" type="button">
+                <span class="btn-spinner" aria-hidden="true"></span>
+                <span id="reviewBtnText">AI Review Database</span>
+            </button>
+            <button id="exportBtn" class="btn btn-dark" type="button">Export MVC + SQL Server</button>
+        </div>
+
+        <div class="table-list-card">
+            <div class="panel-title-row compact">
+                <h2>Tables</h2>
+                <span id="tableCount" class="soft-pill">0</span>
+            </div>
+            <div id="tableList" class="table-list"></div>
+        </div>
+    </aside>
+
+    <main class="designer-panel designer-canvas-panel">
+        <div class="canvas-toolbar">
+            <div>
+                <p class="section-kicker">Schema canvas</p>
+                <h2>SQL Server diagram</h2>
+                <p>Drag tables on the canvas. Foreign keys are drawn as clear orthogonal relationship lines.</p>
+            </div>
+            <div class="toolbar-metrics">
+                <span id="relationCount" class="soft-pill">0 relations</span>
+                <button id="autoLayoutBtn" class="btn btn-light" type="button">Auto layout</button>
+            </div>
+        </div>
+
+        <div id="canvasViewport" class="canvas-viewport">
+            <div id="canvas" class="schema-canvas">
+                <svg id="relationSvg" class="relation-svg" width="1800" height="1200" viewBox="0 0 1800 1200" aria-hidden="true">
+                    <defs>
+                        <marker id="arrowHead" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+                            <path d="M0,0 L0,6 L7,3 z" fill="#1d6fe8"></path>
+                        </marker>
+                    </defs>
+                </svg>
+                <div id="tableLayer" class="table-layer"></div>
+                <div id="emptyCanvas" class="empty-canvas">
+                    <div class="empty-icon">+</div>
+                    <h3>No tables yet</h3>
+                    <p>Paste SQL or add tables manually to start designing.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <aside class="designer-panel inspector-panel">
+        <div class="panel-title-row">
+            <div>
+                <p class="section-kicker">Inspector</p>
+                <h2>Properties</h2>
+            </div>
+        </div>
+        <div id="inspectorContent" class="inspector-content"></div>
+    </aside>
+</section>
+
+<div id="reviewOverlay" class="review-overlay" hidden>
+    <div class="review-dialog">
+        <div class="review-header">
+            <div>
+                <p class="section-kicker">AI Database Review</p>
+                <h2 id="reviewTitle">Relationship review</h2>
+                <p id="reviewSource">Database links only</p>
+            </div>
+            <button id="closeReviewBtn" class="icon-btn" type="button" aria-label="Close review">×</button>
+        </div>
+        <div class="review-summary-grid">
+            <div><strong id="issueTotal">0</strong><span>Issues</span></div>
+            <div class="high"><strong id="issueHigh">0</strong><span>High</span></div>
+            <div class="medium"><strong id="issueMedium">0</strong><span>Medium</span></div>
+            <div class="low"><strong id="issueLow">0</strong><span>Low</span></div>
+        </div>
+        <div id="reviewIssues" class="review-issues"></div>
+    </div>
+</div>
+
+<div id="toast" class="toast-message" hidden></div>
+
+@section Scripts {
+<script>
+(() => {
+    const canvasSize = { width: 1800, height: 1200 };
+    const tableWidth = 300;
+    const headerHeight = 86;
+    const rowHeight = 34;
+    const state = {
+        schema: { projectName: 'GeneratedMvcApp', tables: [] },
+        selectedTableId: null,
+        selectedColumnId: null,
+        dragging: null
+    };
+
+    const elements = {
+        projectName: document.getElementById('projectName'),
+        sqlInput: document.getElementById('sqlInput'),
+        importSqlBtn: document.getElementById('importSqlBtn'),
+        addTableBtn: document.getElementById('addTableBtn'),
+        autoLayoutBtn: document.getElementById('autoLayoutBtn'),
+        reviewBtn: document.getElementById('reviewBtn'),
+        reviewBtnText: document.getElementById('reviewBtnText'),
+        exportBtn: document.getElementById('exportBtn'),
+        sqlStats: document.getElementById('sqlStats'),
+        tableCount: document.getElementById('tableCount'),
+        relationCount: document.getElementById('relationCount'),
+        tableList: document.getElementById('tableList'),
+        tableLayer: document.getElementById('tableLayer'),
+        relationSvg: document.getElementById('relationSvg'),
+        emptyCanvas: document.getElementById('emptyCanvas'),
+        inspectorContent: document.getElementById('inspectorContent'),
+        reviewOverlay: document.getElementById('reviewOverlay'),
+        closeReviewBtn: document.getElementById('closeReviewBtn'),
+        reviewTitle: document.getElementById('reviewTitle'),
+        reviewSource: document.getElementById('reviewSource'),
+        issueTotal: document.getElementById('issueTotal'),
+        issueHigh: document.getElementById('issueHigh'),
+        issueMedium: document.getElementById('issueMedium'),
+        issueLow: document.getElementById('issueLow'),
+        reviewIssues: document.getElementById('reviewIssues'),
+        toast: document.getElementById('toast')
+    };
+
+    function uid() {
+        if (window.crypto && crypto.randomUUID) {
+            return crypto.randomUUID().replaceAll('-', '');
+        }
+        return Math.random().toString(16).slice(2) + Date.now().toString(16);
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
+
+    function normalizeSchema(schema) {
+        state.schema = {
+            projectName: schema.projectName || elements.projectName.value || 'GeneratedMvcApp',
+            tables: (schema.tables || []).map((table, tableIndex) => ({
+                id: table.id || uid(),
+                name: table.name || `table_${tableIndex + 1}`,
+                x: Number.isFinite(Number(table.x)) ? Number(table.x) : 80 + (tableIndex % 3) * 380,
+                y: Number.isFinite(Number(table.y)) ? Number(table.y) : 80 + Math.floor(tableIndex / 3) * 320,
+                columns: (table.columns || []).map((column, columnIndex) => ({
+                    id: column.id || uid(),
+                    name: column.name || `column_${columnIndex + 1}`,
+                    sqlType: column.sqlType || 'nvarchar(255)',
+                    isPrimaryKey: Boolean(column.isPrimaryKey),
+                    isNullable: column.isPrimaryKey ? false : column.isNullable !== false,
+                    isUnique: Boolean(column.isUnique),
+                    foreignKeyTable: column.foreignKeyTable || '',
+                    foreignKeyColumn: column.foreignKeyColumn || '',
+                    order: Number.isFinite(Number(column.order)) ? Number(column.order) : columnIndex
+                }))
+            }))
+        };
+        elements.projectName.value = state.schema.projectName;
+        if (!state.selectedTableId && state.schema.tables.length > 0) {
+            state.selectedTableId = state.schema.tables[0].id;
+        }
+    }
+
+    function selectedTable() {
+        return state.schema.tables.find(table => table.id === state.selectedTableId) || null;
+    }
+
+    function selectedColumn() {
+        const table = selectedTable();
+        return table ? table.columns.find(column => column.id === state.selectedColumnId) || null : null;
+    }
+
+    function relationColumns() {
+        return state.schema.tables.flatMap(table => table.columns
+            .filter(column => column.foreignKeyTable)
+            .map(column => ({ table, column })));
+    }
+
+    function showToast(message) {
+        elements.toast.textContent = message;
+        elements.toast.hidden = false;
+        clearTimeout(showToast.timer);
+        showToast.timer = setTimeout(() => elements.toast.hidden = true, 3200);
+    }
+
+    function render() {
+        state.schema.projectName = elements.projectName.value || 'GeneratedMvcApp';
+        elements.sqlStats.textContent = `${state.schema.tables.length} tables`;
+        elements.tableCount.textContent = state.schema.tables.length;
+        elements.relationCount.textContent = `${relationColumns().length} relations`;
+        elements.emptyCanvas.hidden = state.schema.tables.length > 0;
+        renderTableList();
+        renderCanvasTables();
+        renderRelations();
+        renderInspector();
+    }
+
+    function renderTableList() {
+        if (state.schema.tables.length === 0) {
+            elements.tableList.innerHTML = '<div class="empty-list">No tables yet.</div>';
+            return;
+        }
+
+        elements.tableList.innerHTML = state.schema.tables.map(table => `
+            <button class="table-list-item ${table.id === state.selectedTableId ? 'active' : ''}" type="button" data-select-table="${table.id}">
+                <span>${escapeHtml(table.name)}</span>
+                <small>${table.columns.length} cols</small>
+            </button>
+        `).join('');
+    }
+
+    function renderCanvasTables() {
+        elements.tableLayer.innerHTML = state.schema.tables.map(table => {
+            const rows = table.columns
+                .sort((a, b) => a.order - b.order)
+                .map(column => {
+                    const badges = [];
+                    if (column.isPrimaryKey) badges.push('<span class="badge pk">PK</span>');
+                    if (column.foreignKeyTable) badges.push('<span class="badge fk">FK</span>');
+                    if (column.isUnique) badges.push('<span class="badge uq">UQ</span>');
+                    return `
+                        <button class="table-row ${column.id === state.selectedColumnId ? 'active' : ''}" type="button" data-select-column="${table.id}:${column.id}">
+                            <span class="column-name">${escapeHtml(column.name)}</span>
+                            <span class="column-type">${escapeHtml(column.sqlType)}</span>
+                            <span class="column-badges">${badges.join('')}</span>
+                        </button>
+                    `;
+                }).join('');
+
+            return `
+                <article class="schema-table ${table.id === state.selectedTableId ? 'selected' : ''}" style="transform: translate(${table.x}px, ${table.y}px);" data-table-id="${table.id}">
+                    <header class="schema-table-header" data-drag-table="${table.id}">
+                        <div>
+                            <small>table</small>
+                            <h3>${escapeHtml(table.name)}</h3>
+                        </div>
+                        <span>${table.columns.length} cols</span>
+                    </header>
+                    <div class="schema-table-body">${rows || '<div class="empty-columns">No columns</div>'}</div>
+                </article>
+            `;
+        }).join('');
+    }
+
+    function renderRelations() {
+        const defs = elements.relationSvg.querySelector('defs')?.outerHTML || '';
+        const paths = [];
+        const labels = [];
+        const relations = relationColumns();
+
+        relations.forEach((relation, index) => {
+            const targetTable = state.schema.tables.find(table => table.name.toLowerCase() === relation.column.foreignKeyTable.toLowerCase());
+            if (!targetTable) return;
+
+            const targetColumnName = relation.column.foreignKeyColumn || 'id';
+            const targetColumn = targetTable.columns.find(column => column.name.toLowerCase() === targetColumnName.toLowerCase()) || targetTable.columns.find(column => column.isPrimaryKey) || targetTable.columns[0];
+            if (!targetColumn) return;
+
+            const leftToRight = relation.table.x <= targetTable.x;
+            const start = columnAnchor(relation.table, relation.column, leftToRight ? 'right' : 'left');
+            const end = columnAnchor(targetTable, targetColumn, leftToRight ? 'left' : 'right');
+            const offset = 26 + (index % 5) * 18;
+            const midX = leftToRight ? Math.max(start.x + offset, (start.x + end.x) / 2) : Math.min(start.x - offset, (start.x + end.x) / 2);
+            const d = `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
+
+            paths.push(`<path class="relation-path" d="${d}" marker-end="url(#arrowHead)"></path>`);
+            labels.push(`<text class="relation-label" x="${end.x + (leftToRight ? -44 : 14)}" y="${end.y - 8}">1</text>`);
+            labels.push(`<text class="relation-label many" x="${start.x + (leftToRight ? 12 : -46)}" y="${start.y - 8}">1..*</text>`);
+        });
+
+        elements.relationSvg.innerHTML = defs + paths.join('') + labels.join('');
+    }
+
+    function columnAnchor(table, column, side) {
+        const sorted = [...table.columns].sort((a, b) => a.order - b.order);
+        const index = Math.max(0, sorted.findIndex(candidate => candidate.id === column.id));
+        return {
+            x: table.x + (side === 'right' ? tableWidth : 0),
+            y: table.y + headerHeight + index * rowHeight + rowHeight / 2
+        };
+    }
+
+    function renderInspector() {
+        const table = selectedTable();
+        const column = selectedColumn();
+
+        if (!table) {
+            elements.inspectorContent.innerHTML = `
+                <div class="empty-inspector">
+                    <h3>Select a table</h3>
+                    <p>Click a table on the canvas to edit columns and relationships.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const fkTableOptions = ['<option value="">No relationship</option>']
+            .concat(state.schema.tables
+                .filter(candidate => candidate.id !== table.id)
+                .map(candidate => `<option value="${escapeHtml(candidate.name)}" ${column?.foreignKeyTable === candidate.name ? 'selected' : ''}>${escapeHtml(candidate.name)}</option>`))
+            .join('');
+
+        const targetTable = column?.foreignKeyTable
+            ? state.schema.tables.find(candidate => candidate.name.toLowerCase() === column.foreignKeyTable.toLowerCase())
+            : null;
+        const fkColumnOptions = targetTable
+            ? targetTable.columns.map(candidate => `<option value="${escapeHtml(candidate.name)}" ${column?.foreignKeyColumn === candidate.name ? 'selected' : ''}>${escapeHtml(candidate.name)}</option>`).join('')
+            : '<option value="">Target column</option>';
+
+        elements.inspectorContent.innerHTML = `
+            <div class="editor-section">
+                <label class="field-label">Table name</label>
+                <input class="text-input" data-edit-table-name value="${escapeHtml(table.name)}" />
+                <div class="mini-actions">
+                    <button class="btn btn-light" type="button" data-add-column>Add column</button>
+                    <button class="btn btn-danger" type="button" data-delete-table>Delete table</button>
+                </div>
+            </div>
+            <div class="editor-section">
+                <h3>Columns</h3>
+                <div class="inspector-column-list">
+                    ${table.columns.map(col => `
+                        <button class="inspector-column ${col.id === state.selectedColumnId ? 'active' : ''}" type="button" data-select-column="${table.id}:${col.id}">
+                            <span>${escapeHtml(col.name)}</span><small>${escapeHtml(col.sqlType)}</small>
+                        </button>
+                    `).join('') || '<p class="muted">No columns yet.</p>'}
+                </div>
+            </div>
+            ${column ? `
+            <div class="editor-section">
+                <h3>Column detail</h3>
+                <label class="field-label">Column name</label>
+                <input class="text-input" data-edit-column-name value="${escapeHtml(column.name)}" />
+                <label class="field-label">SQL Server type</label>
+                <input class="text-input" data-edit-column-type value="${escapeHtml(column.sqlType)}" />
+                <div class="check-grid">
+                    <label><input type="checkbox" data-edit-pk ${column.isPrimaryKey ? 'checked' : ''} /> Primary key</label>
+                    <label><input type="checkbox" data-edit-nullable ${column.isNullable ? 'checked' : ''} ${column.isPrimaryKey ? 'disabled' : ''} /> Nullable</label>
+                    <label><input type="checkbox" data-edit-unique ${column.isUnique ? 'checked' : ''} /> Unique</label>
+                </div>
+                <label class="field-label">Relationship target table</label>
+                <select class="text-input" data-edit-fk-table>${fkTableOptions}</select>
+                <label class="field-label">Target column</label>
+                <select class="text-input" data-edit-fk-column>${fkColumnOptions}</select>
+                <button class="btn btn-danger wide" type="button" data-delete-column>Delete column</button>
+            </div>` : ''}
+        `;
+    }
+
+    function autoLayout() {
+        const roots = [...state.schema.tables].sort((a, b) => inboundCount(a) - inboundCount(b));
+        roots.forEach((table, index) => {
+            table.x = 80 + (index % 3) * 390;
+            table.y = 80 + Math.floor(index / 3) * 330;
+        });
+        render();
+    }
+
+    function inboundCount(table) {
+        return relationColumns().filter(relation => relation.column.foreignKeyTable.toLowerCase() === table.name.toLowerCase()).length;
+    }
+
+    function addTable() {
+        const next = state.schema.tables.length + 1;
+        const table = {
+            id: uid(),
+            name: `new_table_${next}`,
+            x: 80 + ((next - 1) % 3) * 390,
+            y: 80 + Math.floor((next - 1) / 3) * 330,
+            columns: [{ id: uid(), name: 'id', sqlType: 'int', isPrimaryKey: true, isNullable: false, isUnique: false, foreignKeyTable: '', foreignKeyColumn: '', order: 0 }]
+        };
+        state.schema.tables.push(table);
+        state.selectedTableId = table.id;
+        state.selectedColumnId = table.columns[0].id;
+        render();
+    }
+
+    function addColumn(table) {
+        const column = {
+            id: uid(),
+            name: `column_${table.columns.length + 1}`,
+            sqlType: 'nvarchar(255)',
+            isPrimaryKey: false,
+            isNullable: true,
+            isUnique: false,
+            foreignKeyTable: '',
+            foreignKeyColumn: '',
+            order: table.columns.length
+        };
+        table.columns.push(column);
+        state.selectedColumnId = column.id;
+        render();
+    }
+
+    async function importSql() {
+        const sql = elements.sqlInput.value.trim();
+        if (!sql) {
+            showToast('Paste SQL before importing.');
+            return;
+        }
+
+        elements.importSqlBtn.disabled = true;
+        try {
+            const response = await fetch('/DatabaseDesigner/ImportSql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sql, projectName: elements.projectName.value })
+            });
+            if (!response.ok) throw new Error('Import failed');
+            normalizeSchema(await response.json());
+            state.selectedTableId = state.schema.tables[0]?.id || null;
+            state.selectedColumnId = state.schema.tables[0]?.columns[0]?.id || null;
+            render();
+            showToast(`Imported ${state.schema.tables.length} tables.`);
+        } catch (error) {
+            showToast(error.message || 'Import failed.');
+        } finally {
+            elements.importSqlBtn.disabled = false;
+        }
+    }
+
+    async function reviewSchema() {
+        if (state.schema.tables.length === 0) {
+            showToast('Add or import tables before AI review.');
+            return;
+        }
+
+        elements.reviewBtn.classList.add('loading');
+        elements.reviewBtn.disabled = true;
+        elements.reviewBtnText.textContent = 'Reviewing...';
+        const startedAt = performance.now();
+        try {
+            const response = await fetch('/DatabaseDesigner/Review', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(state.schema)
+            });
+            if (!response.ok) throw new Error('AI review failed');
+            showReview(await response.json());
+        } catch (error) {
+            showToast(error.message || 'AI review failed.');
+        } finally {
+            const elapsed = performance.now() - startedAt;
+            if (elapsed < 700) {
+                await new Promise(resolve => setTimeout(resolve, 700 - elapsed));
+            }
+            elements.reviewBtn.classList.remove('loading');
+            elements.reviewBtn.disabled = false;
+            elements.reviewBtnText.textContent = 'AI Review Database';
+        }
+    }
+
+    function showReview(result) {
+        const issues = result.issues || [];
+        elements.reviewTitle.textContent = result.summary || 'Database review completed';
+        elements.reviewSource.textContent = result.source || 'Database links only';
+        elements.issueTotal.textContent = issues.length;
+        elements.issueHigh.textContent = result.highCount ?? issues.filter(i => String(i.severity).toUpperCase() === 'HIGH').length;
+        elements.issueMedium.textContent = result.mediumCount ?? issues.filter(i => String(i.severity).toUpperCase() === 'MEDIUM').length;
+        elements.issueLow.textContent = result.lowCount ?? issues.filter(i => String(i.severity).toUpperCase() === 'LOW').length;
+        elements.reviewIssues.innerHTML = issues.length === 0
+            ? '<div class="review-empty"><strong>Looks clean.</strong><span>No database relationship issue was found.</span></div>'
+            : issues.map(issue => `
+                <article class="issue-card ${String(issue.severity || '').toLowerCase()}">
+                    <div><span>${escapeHtml(issue.severity || 'LOW')}</span><strong>${escapeHtml(issue.type || 'ISSUE')}</strong></div>
+                    <p>${escapeHtml(issue.message || '')}</p>
+                    <small>${escapeHtml(issue.suggestion || '')}</small>
+                </article>
+            `).join('');
+        elements.reviewOverlay.hidden = false;
+    }
+
+    async function exportProject() {
+        if (state.schema.tables.length === 0) {
+            showToast('Add or import tables before exporting.');
+            return;
+        }
+
+        elements.exportBtn.disabled = true;
+        try {
+            const response = await fetch('/DatabaseDesigner/Export', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(state.schema)
+            });
+            if (!response.ok) throw new Error('Export failed');
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `${state.schema.projectName || 'GeneratedMvcApp'}-aspnet-mvc-sqlserver.zip`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+            showToast('Exported ASP.NET Core MVC + SQL Server source.');
+        } catch (error) {
+            showToast(error.message || 'Export failed.');
+        } finally {
+            elements.exportBtn.disabled = false;
+        }
+    }
+
+    document.addEventListener('click', event => {
+        const tableButton = event.target.closest('[data-select-table]');
+        if (tableButton) {
+            state.selectedTableId = tableButton.dataset.selectTable;
+            state.selectedColumnId = selectedTable()?.columns[0]?.id || null;
+            render();
+            return;
+        }
+
+        const columnButton = event.target.closest('[data-select-column]');
+        if (columnButton) {
+            const [tableId, columnId] = columnButton.dataset.selectColumn.split(':');
+            state.selectedTableId = tableId;
+            state.selectedColumnId = columnId;
+            render();
+            return;
+        }
+
+        if (event.target.closest('[data-add-column]')) {
+            const table = selectedTable();
+            if (table) addColumn(table);
+            return;
+        }
+
+        if (event.target.closest('[data-delete-table]')) {
+            const table = selectedTable();
+            if (!table) return;
+            state.schema.tables = state.schema.tables.filter(candidate => candidate.id !== table.id);
+            state.schema.tables.forEach(candidate => candidate.columns.forEach(column => {
+                if (column.foreignKeyTable === table.name) {
+                    column.foreignKeyTable = '';
+                    column.foreignKeyColumn = '';
+                }
+            }));
+            state.selectedTableId = state.schema.tables[0]?.id || null;
+            state.selectedColumnId = state.schema.tables[0]?.columns[0]?.id || null;
+            render();
+            return;
+        }
+
+        if (event.target.closest('[data-delete-column]')) {
+            const table = selectedTable();
+            const column = selectedColumn();
+            if (!table || !column) return;
+            table.columns = table.columns.filter(candidate => candidate.id !== column.id);
+            state.selectedColumnId = table.columns[0]?.id || null;
+            render();
+        }
+    });
+
+    document.addEventListener('input', event => {
+        const table = selectedTable();
+        const column = selectedColumn();
+
+        if (event.target.matches('[data-edit-table-name]') && table) {
+            const oldName = table.name;
+            table.name = event.target.value;
+            state.schema.tables.forEach(candidate => candidate.columns.forEach(col => {
+                if (col.foreignKeyTable === oldName) col.foreignKeyTable = table.name;
+            }));
+            render();
+        }
+
+        if (event.target.matches('[data-edit-column-name]') && column) {
+            column.name = event.target.value;
+            render();
+        }
+
+        if (event.target.matches('[data-edit-column-type]') && column) {
+            column.sqlType = event.target.value;
+            render();
+        }
+    });
+
+    document.addEventListener('change', event => {
+        const column = selectedColumn();
+        if (!column) return;
+
+        if (event.target.matches('[data-edit-pk]')) {
+            column.isPrimaryKey = event.target.checked;
+            if (column.isPrimaryKey) column.isNullable = false;
+            render();
+        }
+
+        if (event.target.matches('[data-edit-nullable]')) {
+            column.isNullable = event.target.checked;
+            render();
+        }
+
+        if (event.target.matches('[data-edit-unique]')) {
+            column.isUnique = event.target.checked;
+            render();
+        }
+
+        if (event.target.matches('[data-edit-fk-table]')) {
+            column.foreignKeyTable = event.target.value;
+            const targetTable = state.schema.tables.find(table => table.name === column.foreignKeyTable);
+            column.foreignKeyColumn = targetTable?.columns.find(col => col.isPrimaryKey)?.name || targetTable?.columns[0]?.name || '';
+            render();
+        }
+
+        if (event.target.matches('[data-edit-fk-column]')) {
+            column.foreignKeyColumn = event.target.value;
+            render();
+        }
+    });
+
+    document.addEventListener('pointerdown', event => {
+        const dragHandle = event.target.closest('[data-drag-table]');
+        if (!dragHandle) return;
+        const table = state.schema.tables.find(candidate => candidate.id === dragHandle.dataset.dragTable);
+        if (!table) return;
+        state.selectedTableId = table.id;
+        state.dragging = {
+            table,
+            startX: event.clientX,
+            startY: event.clientY,
+            originX: table.x,
+            originY: table.y
+        };
+        dragHandle.setPointerCapture?.(event.pointerId);
+        render();
+    });
+
+    document.addEventListener('pointermove', event => {
+        if (!state.dragging) return;
+        const drag = state.dragging;
+        drag.table.x = Math.max(24, Math.min(canvasSize.width - tableWidth - 24, drag.originX + event.clientX - drag.startX));
+        drag.table.y = Math.max(24, Math.min(canvasSize.height - 180, drag.originY + event.clientY - drag.startY));
+        renderCanvasTables();
+        renderRelations();
+    });
+
+    document.addEventListener('pointerup', () => {
+        state.dragging = null;
+    });
+
+    elements.projectName.addEventListener('input', render);
+    elements.importSqlBtn.addEventListener('click', importSql);
+    elements.addTableBtn.addEventListener('click', addTable);
+    elements.autoLayoutBtn.addEventListener('click', autoLayout);
+    elements.reviewBtn.addEventListener('click', reviewSchema);
+    elements.exportBtn.addEventListener('click', exportProject);
+    elements.closeReviewBtn.addEventListener('click', () => elements.reviewOverlay.hidden = true);
+
+    normalizeSchema(state.schema);
+    render();
+})();
+</script>
+}
+
