@@ -1,0 +1,37 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - DoAnLapTrinhWeb</title>
+    <script type="importmap"></script>
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/DoAnLapTrinhWeb.styles.css" asp-append-version="true" />
+</head>
+<body>
+    <header class="top-shell">
+        <a class="app-brand" asp-area="" asp-controller="DatabaseDesigner" asp-action="Index">
+            <span class="app-logo">S</span>
+            <span>
+                <strong>SchemaForge MVC</strong>
+                <small>ASP.NET Core + SQL Server</small>
+            </span>
+        </a>
+        <nav class="top-nav">
+            <a asp-area="" asp-controller="DatabaseDesigner" asp-action="Index">Database Designer</a>
+            <span>AI Review</span>
+            <span>Source Export</span>
+        </nav>
+    </header>
+
+    <main role="main">
+        @RenderBody()
+    </main>
+
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>
