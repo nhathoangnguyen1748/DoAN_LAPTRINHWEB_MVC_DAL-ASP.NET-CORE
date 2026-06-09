@@ -531,7 +531,7 @@
     }
 
     document.addEventListener('click', event => {
-        const tableButton = event.target.closest('[data-select-table]');
+            const tableButton = event.target.closest('[data-select-table]');
         if (tableButton) {
             state.selectedTableId = tableButton.dataset.selectTable;
             state.selectedColumnId = selectedTable()?.columns[0]?.id || null;
@@ -669,9 +669,7 @@
 
     elements.projectName.addEventListener('input', render);
     elements.importSqlBtn.addEventListener('click', importSql);
-    elements.addTableBtn.addEventListener('click', addTable);
     elements.autoLayoutBtn.addEventListener('click', autoLayout);
-    elements.reviewBtn.addEventListener('click', reviewSchema);
     elements.exportBtn.addEventListener('click', exportProject);
     elements.closeReviewBtn.addEventListener('click', () => elements.reviewOverlay.hidden = true);
 
