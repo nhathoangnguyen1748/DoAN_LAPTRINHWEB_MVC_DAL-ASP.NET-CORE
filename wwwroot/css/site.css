@@ -260,6 +260,12 @@ button:disabled {
   gap: 1rem;
 }
 
+.review-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
 .panel-title-row.compact {
   align-items: center;
 }
@@ -739,11 +745,19 @@ button:disabled {
 .issue-card.medium { border-color: #fde68a; background: var(--amber-soft); }
 .issue-card.low { border-color: #bbf7d0; background: var(--green-soft); }
 
-.issue-card div {
+.issue-card-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
+}
+
+.issue-card-header > div {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.5rem;
 }
 
 .issue-card span {
@@ -769,6 +783,22 @@ button:disabled {
 .review-empty span {
   color: #52647c;
   font-weight: 700;
+}
+
+.issue-fix-btn {
+  flex: 0 0 auto;
+  min-height: 36px;
+  border-radius: 12px;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.82rem;
+}
+
+.issue-fix-note {
+  display: block;
+  margin-top: 0.55rem;
+  color: #0f58be;
+  font-style: normal;
+  font-weight: 900;
 }
 
 .toast-message {
@@ -802,6 +832,10 @@ button:disabled {
   .review-header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .review-header-actions {
+    justify-content: space-between;
   }
 
   .designer-shell {

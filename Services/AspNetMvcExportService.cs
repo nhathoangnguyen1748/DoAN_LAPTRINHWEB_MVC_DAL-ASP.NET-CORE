@@ -53,6 +53,7 @@ public sealed class AspNetMvcExportService
                 {
                     Id = string.IsNullOrWhiteSpace(table.Id) ? Guid.NewGuid().ToString("N") : table.Id,
                     Name = table.Name.Trim(),
+                    LastValidName = string.IsNullOrWhiteSpace(table.LastValidName) ? table.Name.Trim() : table.LastValidName.Trim(),
                     X = table.X,
                     Y = table.Y,
                     Columns = table.Columns

@@ -90,7 +90,10 @@
                 <h2 id="reviewTitle">Relationship review</h2>
                 <p id="reviewSource">Database links only</p>
             </div>
-            <button id="closeReviewBtn" class="icon-btn" type="button" aria-label="Close review">×</button>
+            <div class="review-header-actions">
+                <button id="fixAllReviewBtn" class="btn btn-ai" type="button" hidden>Fix all</button>
+                <button id="closeReviewBtn" class="icon-btn" type="button" aria-label="Close review">×</button>
+            </div>
         </div>
         <div class="review-summary-grid">
             <div><strong id="issueTotal">0</strong><span>Issues</span></div>
@@ -115,7 +118,9 @@
         schema: { projectName: 'GeneratedMvcApp', tables: [] },
         selectedTableId: null,
         selectedColumnId: null,
-        dragging: null
+        dragging: null,
+        lastReviewResult: null,
+        fixingReview: false
     };
 
     const elements = {
@@ -137,6 +142,7 @@
         inspectorContent: document.getElementById('inspectorContent'),
         reviewOverlay: document.getElementById('reviewOverlay'),
         closeReviewBtn: document.getElementById('closeReviewBtn'),
+        fixAllReviewBtn: document.getElementById('fixAllReviewBtn'),
         reviewTitle: document.getElementById('reviewTitle'),
         reviewSource: document.getElementById('reviewSource'),
         issueTotal: document.getElementById('issueTotal'),
@@ -168,7 +174,8 @@
             projectName: schema.projectName || elements.projectName.value || 'GeneratedMvcApp',
             tables: (schema.tables || []).map((table, tableIndex) => ({
                 id: table.id || uid(),
-                name: table.name || `table_${tableIndex + 1}`,
+                name: table.name ?? `table_${tableIndex + 1}`,
+                lastValidName: table.lastValidName || table.name || `table_${tableIndex + 1}`,
                 x: Number.isFinite(Number(table.x)) ? Number(table.x) : 80 + (tableIndex % 3) * 380,
                 y: Number.isFinite(Number(table.y)) ? Number(table.y) : 80 + Math.floor(tableIndex / 3) * 320,
                 columns: (table.columns || []).map((column, columnIndex) => ({
@@ -185,8 +192,24 @@
             }))
         };
         elements.projectName.value = state.schema.projectName;
-        if (!state.selectedTableId && state.schema.tables.length > 0) {
+        if (state.schema.tables.length === 0) {
+            state.selectedTableId = null;
+            state.selectedColumnId = null;
+            return;
+        }
+
+        if (!state.schema.tables.some(table => table.id === state.selectedTableId)) {
             state.selectedTableId = state.schema.tables[0].id;
+        }
+        const table = state.schema.tables.find(candidate => candidate.id === state.selectedTableId);
+        if (!table) {
+            state.selectedTableId = null;
+            state.selectedColumnId = null;
+            return;
+        }
+
+        if (!table.columns.some(column => column.id === state.selectedColumnId)) {
+            state.selectedColumnId = table.columns[0]?.id || null;
         }
     }
 
@@ -394,6 +417,7 @@
         const table = {
             id: uid(),
             name: `new_table_${next}`,
+            lastValidName: `new_table_${next}`,
             x: 80 + ((next - 1) % 3) * 390,
             y: 80 + Math.floor((next - 1) / 3) * 330,
             columns: [{ id: uid(), name: 'id', sqlType: 'int', isPrimaryKey: true, isNullable: false, isUnique: false, foreignKeyTable: '', foreignKeyColumn: '', order: 0 }]
@@ -481,22 +505,66 @@
 
     function showReview(result) {
         const issues = result.issues || [];
+        const fixableCount = issues.filter(issue => issue.canAutoFix).length;
+        state.lastReviewResult = result;
         elements.reviewTitle.textContent = result.summary || 'Database review completed';
         elements.reviewSource.textContent = result.source || 'Database links only';
         elements.issueTotal.textContent = issues.length;
         elements.issueHigh.textContent = result.highCount ?? issues.filter(i => String(i.severity).toUpperCase() === 'HIGH').length;
         elements.issueMedium.textContent = result.mediumCount ?? issues.filter(i => String(i.severity).toUpperCase() === 'MEDIUM').length;
         elements.issueLow.textContent = result.lowCount ?? issues.filter(i => String(i.severity).toUpperCase() === 'LOW').length;
+        elements.fixAllReviewBtn.hidden = fixableCount === 0;
+        elements.fixAllReviewBtn.disabled = fixableCount === 0 || state.fixingReview;
+        elements.fixAllReviewBtn.textContent = `Fix all (${fixableCount})`;
         elements.reviewIssues.innerHTML = issues.length === 0
             ? '<div class="review-empty"><strong>Looks clean.</strong><span>No database relationship issue was found.</span></div>'
-            : issues.map(issue => `
+            : issues.map((issue, index) => `
                 <article class="issue-card ${String(issue.severity || '').toLowerCase()}">
-                    <div><span>${escapeHtml(issue.severity || 'LOW')}</span><strong>${escapeHtml(issue.type || 'ISSUE')}</strong></div>
+                    <div class="issue-card-header">
+                        <div><span>${escapeHtml(issue.severity || 'LOW')}</span><strong>${escapeHtml(issue.type || 'ISSUE')}</strong></div>
+                        ${issue.canAutoFix ? `<button class="btn btn-light issue-fix-btn" type="button" data-fix-issue="${index}">Fix issue</button>` : ''}
+                    </div>
                     <p>${escapeHtml(issue.message || '')}</p>
                     <small>${escapeHtml(issue.suggestion || '')}</small>
+                    ${issue.canAutoFix && issue.fixAction ? `<em class="issue-fix-note">${escapeHtml(issue.fixAction)}</em>` : ''}
                 </article>
             `).join('');
         elements.reviewOverlay.hidden = false;
+    }
+
+    async function applyReviewFix(issueIndex = null, fixAll = false) {
+        const issues = state.lastReviewResult?.issues || [];
+        const issue = fixAll ? null : issues[issueIndex];
+        if (!fixAll && !issue) {
+            showToast('Select an issue to fix.');
+            return;
+        }
+
+        state.fixingReview = true;
+        elements.fixAllReviewBtn.disabled = true;
+        elements.reviewIssues.querySelectorAll('button').forEach(button => button.disabled = true);
+
+        try {
+            const response = await fetch('/DatabaseDesigner/FixReview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ schema: state.schema, issue, fixAll })
+            });
+            if (!response.ok) throw new Error('Automatic fix failed');
+            const result = await response.json();
+            normalizeSchema(result.schema || state.schema);
+            render();
+            state.fixingReview = false;
+            showReview(result.review || { issues: [] });
+            showToast(result.message || 'Automatic fix applied.');
+        } catch (error) {
+            showToast(error.message || 'Automatic fix failed.');
+        } finally {
+            state.fixingReview = false;
+            const fixableCount = (state.lastReviewResult?.issues || []).filter(item => item.canAutoFix).length;
+            elements.fixAllReviewBtn.disabled = fixableCount === 0;
+            elements.reviewIssues.querySelectorAll('button').forEach(button => button.disabled = false);
+        }
     }
 
     async function exportProject() {
@@ -531,7 +599,13 @@
     }
 
     document.addEventListener('click', event => {
-            const tableButton = event.target.closest('[data-select-table]');
+        const fixButton = event.target.closest('[data-fix-issue]');
+        if (fixButton) {
+            applyReviewFix(Number(fixButton.dataset.fixIssue), false);
+            return;
+        }
+
+        const tableButton = event.target.closest('[data-select-table]');
         if (tableButton) {
             state.selectedTableId = tableButton.dataset.selectTable;
             state.selectedColumnId = selectedTable()?.columns[0]?.id || null;
@@ -557,9 +631,10 @@
         if (event.target.closest('[data-delete-table]')) {
             const table = selectedTable();
             if (!table) return;
+            const tableReferenceName = table.name || table.lastValidName || '';
             state.schema.tables = state.schema.tables.filter(candidate => candidate.id !== table.id);
             state.schema.tables.forEach(candidate => candidate.columns.forEach(column => {
-                if (column.foreignKeyTable === table.name) {
+                if (tableReferenceName && column.foreignKeyTable === tableReferenceName) {
                     column.foreignKeyTable = '';
                     column.foreignKeyColumn = '';
                 }
@@ -586,10 +661,17 @@
 
         if (event.target.matches('[data-edit-table-name]') && table) {
             const oldName = table.name;
-            table.name = event.target.value;
-            state.schema.tables.forEach(candidate => candidate.columns.forEach(col => {
-                if (col.foreignKeyTable === oldName) col.foreignKeyTable = table.name;
-            }));
+            const oldReferenceName = oldName || table.lastValidName || '';
+            const newName = event.target.value;
+            table.name = newName;
+            if (newName.trim()) {
+                if (oldReferenceName.trim()) {
+                    state.schema.tables.forEach(candidate => candidate.columns.forEach(col => {
+                        if (col.foreignKeyTable === oldReferenceName) col.foreignKeyTable = newName;
+                    }));
+                }
+                table.lastValidName = newName;
+            }
             render();
         }
 
@@ -669,6 +751,9 @@
 
     elements.projectName.addEventListener('input', render);
     elements.importSqlBtn.addEventListener('click', importSql);
+    elements.addTableBtn.addEventListener('click', addTable);
+    elements.reviewBtn.addEventListener('click', reviewSchema);
+    elements.fixAllReviewBtn.addEventListener('click', () => applyReviewFix(null, true));
     elements.autoLayoutBtn.addEventListener('click', autoLayout);
     elements.exportBtn.addEventListener('click', exportProject);
     elements.closeReviewBtn.addEventListener('click', () => elements.reviewOverlay.hidden = true);

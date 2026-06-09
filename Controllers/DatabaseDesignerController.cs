@@ -40,6 +40,13 @@ public class DatabaseDesignerController : Controller
     }
 
     [HttpPost]
+    public async Task<IActionResult> FixReview([FromBody] ReviewFixRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _reviewService.FixAsync(request, cancellationToken);
+        return Json(result);
+    }
+
+    [HttpPost]
     public IActionResult Export([FromBody] DatabaseSchema schema)
     {
         if (schema.Tables.Count == 0)

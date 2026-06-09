@@ -8,4 +8,6 @@ public class ReviewIssue
     public string? Column { get; set; }
     public string Message { get; set; } = string.Empty;
     public string Suggestion { get; set; } = string.Empty;
+    public bool CanAutoFix { get; set; }
+    public string FixAction { get; set; } = string.Empty;
 }
