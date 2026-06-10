@@ -2,91 +2,135 @@
     ViewData["Title"] = "Database Designer";
 }
 
-<section class="designer-shell">
-    <aside class="designer-panel designer-sidebar">
-        <div class="brand-block">
-            <span class="brand-mark">DB</span>
-            <div>
-                <p class="section-kicker">ASP.NET MVC Builder</p>
-                <h1>Database Designer</h1>
-                <p>Design schema first, review relationships with AI, then export ASP.NET Core MVC + SQL Server source.</p>
-            </div>
+<section class="designer-workbench">
+    <aside class="designer-panel control-panel">
+        <div class="control-panel-header">
+            <p class="section-kicker">Control Panel</p>
+            <button id="addTableListBtn" class="btn btn-blue-soft compact-action" type="button"><span aria-hidden="true">+</span> New</button>
         </div>
 
-        <label class="field-label" for="projectName">Project name</label>
-        <input id="projectName" class="text-input" value="GeneratedMvcApp" />
-
-        <div class="sql-card">
-            <div class="panel-title-row">
-                <div>
-                    <p class="section-kicker">SQL Import</p>
-                    <h2>Import database structure</h2>
-                </div>
-                <span id="sqlStats" class="soft-pill">0 tables</span>
-            </div>
-            <textarea id="sqlInput" class="sql-input" spellcheck="false" placeholder="Paste CREATE TABLE statements here..."></textarea>
-            <button id="importSqlBtn" class="btn btn-primary" type="button">Import SQL</button>
-        </div>
-
-        <div class="action-grid">
-            <button id="addTableBtn" class="btn btn-light" type="button">Add table</button>
-            <button id="reviewBtn" class="btn btn-ai" type="button">
-                <span class="btn-spinner" aria-hidden="true"></span>
-                <span id="reviewBtnText">AI Review Database</span>
+        <div class="sidebar-tabs" role="tablist" aria-label="Designer panels">
+            <button class="sidebar-tab active" type="button" data-sidebar-tab="tables" role="tab" aria-selected="true">
+                <span class="tab-icon table-icon" aria-hidden="true"></span>
+                Tables
             </button>
-            <button id="exportBtn" class="btn btn-dark" type="button">Export MVC + SQL Server</button>
+            <button class="sidebar-tab" type="button" data-sidebar-tab="properties" role="tab" aria-selected="false">
+                <span class="tab-icon edit-icon" aria-hidden="true"></span>
+                Properties
+            </button>
         </div>
 
-        <div class="table-list-card">
-            <div class="panel-title-row compact">
-                <h2>Tables</h2>
-                <span id="tableCount" class="soft-pill">0</span>
+        <div class="selection-pill" id="selectedTableSummary">No table selected</div>
+
+        <div class="sidebar-pane active" data-sidebar-pane="tables">
+            <div class="table-list-card">
+                <div class="panel-title-row compact">
+                    <div class="panel-heading-inline">
+                        <span class="db-icon" aria-hidden="true"></span>
+                        <h2>Schema Tables</h2>
+                    </div>
+                    <span id="tableCount" class="soft-pill">0</span>
+                </div>
+                <div class="table-tools">
+                    <button id="addTableBtn" class="btn btn-blue-soft" type="button"><span aria-hidden="true">+</span> New table</button>
+                    <label class="search-field" for="tableSearch">
+                        <span aria-hidden="true"></span>
+                        <input id="tableSearch" type="search" placeholder="Search table or column" />
+                    </label>
+                </div>
+                <div id="tableList" class="table-list"></div>
             </div>
-            <div id="tableList" class="table-list"></div>
+        </div>
+
+        <div class="sidebar-pane" data-sidebar-pane="properties" hidden>
+            <label class="field-label" for="projectName">Project name</label>
+            <input id="projectName" class="text-input" value="GeneratedMvcApp" />
+
+            <div class="sql-card">
+                <div class="panel-title-row compact">
+                    <div>
+                        <p class="section-kicker">SQL Import</p>
+                        <h2>Import structure</h2>
+                    </div>
+                    <span id="sqlStats" class="soft-pill">0 tables</span>
+                </div>
+                <textarea id="sqlInput" class="sql-input" spellcheck="false" placeholder="Paste CREATE TABLE statements here..."></textarea>
+                <button id="importSqlBtn" class="btn btn-primary" type="button">Import SQL</button>
+            </div>
+
+            <div class="properties-card">
+                <div class="panel-title-row compact">
+                    <div>
+                        <p class="section-kicker">Inspector</p>
+                        <h2>Properties</h2>
+                    </div>
+                </div>
+                <div id="inspectorContent" class="inspector-content"></div>
+            </div>
         </div>
     </aside>
 
-    <main class="designer-panel designer-canvas-panel">
-        <div class="canvas-toolbar">
+    <main class="designer-panel database-stage">
+        <section class="database-hero">
             <div>
-                <p class="section-kicker">Schema canvas</p>
-                <h2>SQL Server diagram</h2>
-                <p>Drag tables on the canvas. Foreign keys are drawn as clear orthogonal relationship lines.</p>
+                <p class="section-kicker">Database</p>
+                <h1>ER Diagram</h1>
+                <p>DBeaver-style table view with column-level relation anchors.</p>
             </div>
-            <div class="toolbar-metrics">
-                <span id="relationCount" class="soft-pill">0 relations</span>
-                <button id="autoLayoutBtn" class="btn btn-light" type="button">Auto layout</button>
+            <div class="hero-actions">
+                <button id="openImportBtn" class="btn btn-light" type="button"><span class="btn-mini-icon database-icon" aria-hidden="true"></span> Import SQL</button>
+                <button id="autoLayoutBtn" class="btn btn-light" type="button"><span class="btn-mini-icon arrange-icon" aria-hidden="true"></span> Auto Arrange</button>
+                <button id="reviewBtn" class="btn btn-ai" type="button">
+                    <span class="btn-spinner" aria-hidden="true"></span>
+                    <span id="reviewBtnText">AI Review</span>
+                </button>
+                <button id="addCanvasTableBtn" class="btn btn-primary" type="button"><span aria-hidden="true">+</span> New table</button>
+                <button id="deleteAllTablesBtn" class="btn btn-danger" type="button"><span aria-hidden="true">x</span> Delete all tables</button>
+                <button id="exportBtn" class="btn btn-dark" type="button">Export MVC</button>
             </div>
-        </div>
+        </section>
 
-        <div id="canvasViewport" class="canvas-viewport">
-            <div id="canvas" class="schema-canvas">
-                <svg id="relationSvg" class="relation-svg" width="1800" height="1200" viewBox="0 0 1800 1200" aria-hidden="true">
-                    <defs>
-                        <marker id="arrowHead" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
-                            <path d="M0,0 L0,6 L7,3 z" fill="#1d6fe8"></path>
-                        </marker>
-                    </defs>
-                </svg>
-                <div id="tableLayer" class="table-layer"></div>
-                <div id="emptyCanvas" class="empty-canvas">
-                    <div class="empty-icon">+</div>
-                    <h3>No tables yet</h3>
-                    <p>Paste SQL or add tables manually to start designing.</p>
+        <section class="canvas-card">
+            <div class="canvas-toolbar">
+                <div class="canvas-title-row">
+                    <span class="canvas-title-icon" aria-hidden="true"></span>
+                    <div>
+                        <h2>ER diagram canvas</h2>
+                        <p>Column anchors, orthogonal lanes, no shared relation tracks</p>
+                    </div>
+                </div>
+                <div class="toolbar-metrics">
+                    <span id="canvasTableCount" class="soft-pill">0 tables</span>
+                    <span id="relationCount" class="soft-pill">0 relations</span>
+                    <span class="soft-pill success-pill">routed lanes</span>
+                    <div class="zoom-control" aria-label="Canvas zoom">
+                        <button id="zoomOutBtn" type="button" aria-label="Zoom out">-</button>
+                        <span id="zoomValue">45%</span>
+                        <button id="zoomInBtn" type="button" aria-label="Zoom in">+</button>
+                        <button id="zoomFitBtn" type="button">Fit view</button>
+                    </div>
                 </div>
             </div>
-        </div>
-    </main>
 
-    <aside class="designer-panel inspector-panel">
-        <div class="panel-title-row">
-            <div>
-                <p class="section-kicker">Inspector</p>
-                <h2>Properties</h2>
+            <div id="canvasViewport" class="canvas-viewport">
+                <div id="canvas" class="schema-canvas">
+                    <svg id="relationSvg" class="relation-svg" width="1800" height="1200" viewBox="0 0 1800 1200" aria-hidden="true">
+                        <defs>
+                            <marker id="arrowHead" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+                                <path d="M0,0 L0,6 L7,3 z" fill="#2b8cff"></path>
+                            </marker>
+                        </defs>
+                    </svg>
+                    <div id="tableLayer" class="table-layer"></div>
+                    <div id="emptyCanvas" class="empty-canvas">
+                        <div class="empty-icon">+</div>
+                        <h3>No tables yet</h3>
+                        <p>Paste SQL or add tables manually to start designing.</p>
+                    </div>
+                </div>
             </div>
-        </div>
-        <div id="inspectorContent" class="inspector-content"></div>
-    </aside>
+        </section>
+    </main>
 </section>
 
 <div id="reviewOverlay" class="review-overlay" hidden>
@@ -97,7 +141,10 @@
                 <h2 id="reviewTitle">Relationship review</h2>
                 <p id="reviewSource">Database links only</p>
             </div>
-            <button id="closeReviewBtn" class="icon-btn" type="button" aria-label="Close review">×</button>
+            <div class="review-header-actions">
+                <button id="fixAllReviewBtn" class="btn btn-ai" type="button" hidden>Fix all</button>
+                <button id="closeReviewBtn" class="icon-btn" type="button" aria-label="Close review">×</button>
+            </div>
         </div>
         <div class="review-summary-grid">
             <div><strong id="issueTotal">0</strong><span>Issues</span></div>
@@ -115,35 +162,53 @@
 <script>
 (() => {
     const canvasSize = { width: 1800, height: 1200 };
-    const tableWidth = 300;
-    const headerHeight = 86;
-    const rowHeight = 34;
+    const tableWidth = 240;
+    const headerHeight = 58;
+    const rowHeight = 28;
     const state = {
         schema: { projectName: 'GeneratedMvcApp', tables: [] },
         selectedTableId: null,
         selectedColumnId: null,
-        dragging: null
+        dragging: null,
+        lastReviewResult: null,
+        fixingReview: false,
+        zoom: 0.45
     };
 
     const elements = {
+        canvas: document.getElementById('canvas'),
         projectName: document.getElementById('projectName'),
         sqlInput: document.getElementById('sqlInput'),
+        tableSearch: document.getElementById('tableSearch'),
         importSqlBtn: document.getElementById('importSqlBtn'),
+        openImportBtn: document.getElementById('openImportBtn'),
         addTableBtn: document.getElementById('addTableBtn'),
+        addTableListBtn: document.getElementById('addTableListBtn'),
+        addCanvasTableBtn: document.getElementById('addCanvasTableBtn'),
+        deleteAllTablesBtn: document.getElementById('deleteAllTablesBtn'),
         autoLayoutBtn: document.getElementById('autoLayoutBtn'),
         reviewBtn: document.getElementById('reviewBtn'),
         reviewBtnText: document.getElementById('reviewBtnText'),
         exportBtn: document.getElementById('exportBtn'),
         sqlStats: document.getElementById('sqlStats'),
         tableCount: document.getElementById('tableCount'),
+        canvasTableCount: document.getElementById('canvasTableCount'),
         relationCount: document.getElementById('relationCount'),
         tableList: document.getElementById('tableList'),
         tableLayer: document.getElementById('tableLayer'),
         relationSvg: document.getElementById('relationSvg'),
         emptyCanvas: document.getElementById('emptyCanvas'),
+        selectedTableSummary: document.getElementById('selectedTableSummary'),
+        sidebarTabs: [...document.querySelectorAll('[data-sidebar-tab]')],
+        sidebarPanes: [...document.querySelectorAll('[data-sidebar-pane]')],
+        zoomOutBtn: document.getElementById('zoomOutBtn'),
+        zoomInBtn: document.getElementById('zoomInBtn'),
+        zoomFitBtn: document.getElementById('zoomFitBtn'),
+        zoomValue: document.getElementById('zoomValue'),
         inspectorContent: document.getElementById('inspectorContent'),
         reviewOverlay: document.getElementById('reviewOverlay'),
         closeReviewBtn: document.getElementById('closeReviewBtn'),
+        fixAllReviewBtn: document.getElementById('fixAllReviewBtn'),
         reviewTitle: document.getElementById('reviewTitle'),
         reviewSource: document.getElementById('reviewSource'),
         issueTotal: document.getElementById('issueTotal'),
@@ -175,7 +240,8 @@
             projectName: schema.projectName || elements.projectName.value || 'GeneratedMvcApp',
             tables: (schema.tables || []).map((table, tableIndex) => ({
                 id: table.id || uid(),
-                name: table.name || `table_${tableIndex + 1}`,
+                name: table.name ?? `table_${tableIndex + 1}`,
+                lastValidName: table.lastValidName || table.name || `table_${tableIndex + 1}`,
                 x: Number.isFinite(Number(table.x)) ? Number(table.x) : 80 + (tableIndex % 3) * 380,
                 y: Number.isFinite(Number(table.y)) ? Number(table.y) : 80 + Math.floor(tableIndex / 3) * 320,
                 columns: (table.columns || []).map((column, columnIndex) => ({
@@ -192,8 +258,24 @@
             }))
         };
         elements.projectName.value = state.schema.projectName;
-        if (!state.selectedTableId && state.schema.tables.length > 0) {
+        if (state.schema.tables.length === 0) {
+            state.selectedTableId = null;
+            state.selectedColumnId = null;
+            return;
+        }
+
+        if (!state.schema.tables.some(table => table.id === state.selectedTableId)) {
             state.selectedTableId = state.schema.tables[0].id;
+        }
+        const table = state.schema.tables.find(candidate => candidate.id === state.selectedTableId);
+        if (!table) {
+            state.selectedTableId = null;
+            state.selectedColumnId = null;
+            return;
+        }
+
+        if (!table.columns.some(column => column.id === state.selectedColumnId)) {
+            state.selectedColumnId = table.columns[0]?.id || null;
         }
     }
 
@@ -219,12 +301,54 @@
         showToast.timer = setTimeout(() => elements.toast.hidden = true, 3200);
     }
 
+    function setSidebarTab(tabName) {
+        elements.sidebarTabs.forEach(tab => {
+            const active = tab.dataset.sidebarTab === tabName;
+            tab.classList.toggle('active', active);
+            tab.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        elements.sidebarPanes.forEach(pane => {
+            const active = pane.dataset.sidebarPane === tabName;
+            pane.classList.toggle('active', active);
+            pane.hidden = !active;
+        });
+    }
+
+    function setZoom(value) {
+        state.zoom = Math.max(0.35, Math.min(1, value));
+        applyZoom();
+    }
+
+    function applyZoom() {
+        elements.canvas.style.transform = `scale(${state.zoom})`;
+        elements.canvas.style.transformOrigin = '0 0';
+        elements.zoomValue.textContent = `${Math.round(state.zoom * 100)}%`;
+    }
+
+    function deleteAllTables() {
+        if (state.schema.tables.length === 0) {
+            showToast('No tables to delete.');
+            return;
+        }
+
+        state.schema.tables = [];
+        state.selectedTableId = null;
+        state.selectedColumnId = null;
+        state.lastReviewResult = null;
+        render();
+        showToast('All tables were deleted.');
+    }
+
     function render() {
         state.schema.projectName = elements.projectName.value || 'GeneratedMvcApp';
         elements.sqlStats.textContent = `${state.schema.tables.length} tables`;
         elements.tableCount.textContent = state.schema.tables.length;
+        elements.canvasTableCount.textContent = `${state.schema.tables.length} tables`;
         elements.relationCount.textContent = `${relationColumns().length} relations`;
+        const table = selectedTable();
+        elements.selectedTableSummary.textContent = table ? `${table.name || 'Untitled table'} selected` : 'No table selected';
         elements.emptyCanvas.hidden = state.schema.tables.length > 0;
+        applyZoom();
         renderTableList();
         renderCanvasTables();
         renderRelations();
@@ -232,15 +356,28 @@
     }
 
     function renderTableList() {
+        const query = (elements.tableSearch?.value || '').trim().toLowerCase();
+        const tables = query
+            ? state.schema.tables.filter(table =>
+                table.name.toLowerCase().includes(query) ||
+                table.columns.some(column => column.name.toLowerCase().includes(query) || column.sqlType.toLowerCase().includes(query)))
+            : state.schema.tables;
+
         if (state.schema.tables.length === 0) {
             elements.tableList.innerHTML = '<div class="empty-list">No tables yet.</div>';
             return;
         }
 
-        elements.tableList.innerHTML = state.schema.tables.map(table => `
+        if (tables.length === 0) {
+            elements.tableList.innerHTML = '<div class="empty-list">No matching tables.</div>';
+            return;
+        }
+
+        elements.tableList.innerHTML = tables.map(table => `
             <button class="table-list-item ${table.id === state.selectedTableId ? 'active' : ''}" type="button" data-select-table="${table.id}">
-                <span>${escapeHtml(table.name)}</span>
-                <small>${table.columns.length} cols</small>
+                <span class="table-list-chevron" aria-hidden="true">›</span>
+                <span class="table-list-name">${escapeHtml(table.name || 'Untitled table')}</span>
+                <small>${table.columns.length}</small>
             </button>
         `).join('');
     }
@@ -254,11 +391,21 @@
                     if (column.isPrimaryKey) badges.push('<span class="badge pk">PK</span>');
                     if (column.foreignKeyTable) badges.push('<span class="badge fk">FK</span>');
                     if (column.isUnique) badges.push('<span class="badge uq">UQ</span>');
+                    const roleClass = column.isPrimaryKey ? 'pk' : column.foreignKeyTable ? 'fk' : '';
+                    const target = column.foreignKeyTable
+                        ? `<small class="column-target">${escapeHtml(column.foreignKeyTable)}.${escapeHtml(column.foreignKeyColumn || 'id')}</small>`
+                        : '';
                     return `
                         <button class="table-row ${column.id === state.selectedColumnId ? 'active' : ''}" type="button" data-select-column="${table.id}:${column.id}">
-                            <span class="column-name">${escapeHtml(column.name)}</span>
+                            <span class="row-anchor left-anchor" aria-hidden="true"></span>
+                            <span class="column-role ${roleClass}" aria-hidden="true"></span>
+                            <span class="column-main">
+                                <span class="column-name">${escapeHtml(column.name)}</span>
+                                ${target}
+                            </span>
                             <span class="column-type">${escapeHtml(column.sqlType)}</span>
                             <span class="column-badges">${badges.join('')}</span>
+                            <span class="row-anchor right-anchor" aria-hidden="true"></span>
                         </button>
                     `;
                 }).join('');
@@ -266,9 +413,14 @@
             return `
                 <article class="schema-table ${table.id === state.selectedTableId ? 'selected' : ''}" style="transform: translate(${table.x}px, ${table.y}px);" data-table-id="${table.id}">
                     <header class="schema-table-header" data-drag-table="${table.id}">
+                        <span class="drag-grip" aria-hidden="true"></span>
                         <div>
-                            <small>table</small>
-                            <h3>${escapeHtml(table.name)}</h3>
+                            <h3>${escapeHtml(table.name || 'Untitled table')}</h3>
+                            <div class="table-badges">
+                                <span>1 PK</span>
+                                <span>${table.columns.filter(column => column.foreignKeyTable).length} OUT</span>
+                                <span>${table.columns.filter(column => column.isUnique).length} UQ</span>
+                            </div>
                         </div>
                         <span>${table.columns.length} cols</span>
                     </header>
@@ -386,8 +538,8 @@
     function autoLayout() {
         const roots = [...state.schema.tables].sort((a, b) => inboundCount(a) - inboundCount(b));
         roots.forEach((table, index) => {
-            table.x = 80 + (index % 3) * 390;
-            table.y = 80 + Math.floor(index / 3) * 330;
+            table.x = 120 + (index % 4) * 310;
+            table.y = 92 + Math.floor(index / 4) * 245;
         });
         render();
     }
@@ -401,13 +553,15 @@
         const table = {
             id: uid(),
             name: `new_table_${next}`,
-            x: 80 + ((next - 1) % 3) * 390,
-            y: 80 + Math.floor((next - 1) / 3) * 330,
+            lastValidName: `new_table_${next}`,
+            x: 120 + ((next - 1) % 4) * 310,
+            y: 92 + Math.floor((next - 1) / 4) * 245,
             columns: [{ id: uid(), name: 'id', sqlType: 'int', isPrimaryKey: true, isNullable: false, isUnique: false, foreignKeyTable: '', foreignKeyColumn: '', order: 0 }]
         };
         state.schema.tables.push(table);
         state.selectedTableId = table.id;
         state.selectedColumnId = table.columns[0].id;
+        setSidebarTab('properties');
         render();
     }
 
@@ -446,6 +600,7 @@
             normalizeSchema(await response.json());
             state.selectedTableId = state.schema.tables[0]?.id || null;
             state.selectedColumnId = state.schema.tables[0]?.columns[0]?.id || null;
+            setSidebarTab('tables');
             render();
             showToast(`Imported ${state.schema.tables.length} tables.`);
         } catch (error) {
@@ -488,22 +643,66 @@
 
     function showReview(result) {
         const issues = result.issues || [];
+        const fixableCount = issues.filter(issue => issue.canAutoFix).length;
+        state.lastReviewResult = result;
         elements.reviewTitle.textContent = result.summary || 'Database review completed';
         elements.reviewSource.textContent = result.source || 'Database links only';
         elements.issueTotal.textContent = issues.length;
         elements.issueHigh.textContent = result.highCount ?? issues.filter(i => String(i.severity).toUpperCase() === 'HIGH').length;
         elements.issueMedium.textContent = result.mediumCount ?? issues.filter(i => String(i.severity).toUpperCase() === 'MEDIUM').length;
         elements.issueLow.textContent = result.lowCount ?? issues.filter(i => String(i.severity).toUpperCase() === 'LOW').length;
+        elements.fixAllReviewBtn.hidden = fixableCount === 0;
+        elements.fixAllReviewBtn.disabled = fixableCount === 0 || state.fixingReview;
+        elements.fixAllReviewBtn.textContent = `Fix all (${fixableCount})`;
         elements.reviewIssues.innerHTML = issues.length === 0
             ? '<div class="review-empty"><strong>Looks clean.</strong><span>No database relationship issue was found.</span></div>'
-            : issues.map(issue => `
+            : issues.map((issue, index) => `
                 <article class="issue-card ${String(issue.severity || '').toLowerCase()}">
-                    <div><span>${escapeHtml(issue.severity || 'LOW')}</span><strong>${escapeHtml(issue.type || 'ISSUE')}</strong></div>
+                    <div class="issue-card-header">
+                        <div><span>${escapeHtml(issue.severity || 'LOW')}</span><strong>${escapeHtml(issue.type || 'ISSUE')}</strong></div>
+                        ${issue.canAutoFix ? `<button class="btn btn-light issue-fix-btn" type="button" data-fix-issue="${index}">Fix issue</button>` : ''}
+                    </div>
                     <p>${escapeHtml(issue.message || '')}</p>
                     <small>${escapeHtml(issue.suggestion || '')}</small>
+                    ${issue.canAutoFix && issue.fixAction ? `<em class="issue-fix-note">${escapeHtml(issue.fixAction)}</em>` : ''}
                 </article>
             `).join('');
         elements.reviewOverlay.hidden = false;
+    }
+
+    async function applyReviewFix(issueIndex = null, fixAll = false) {
+        const issues = state.lastReviewResult?.issues || [];
+        const issue = fixAll ? null : issues[issueIndex];
+        if (!fixAll && !issue) {
+            showToast('Select an issue to fix.');
+            return;
+        }
+
+        state.fixingReview = true;
+        elements.fixAllReviewBtn.disabled = true;
+        elements.reviewIssues.querySelectorAll('button').forEach(button => button.disabled = true);
+
+        try {
+            const response = await fetch('/DatabaseDesigner/FixReview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ schema: state.schema, issue, fixAll })
+            });
+            if (!response.ok) throw new Error('Automatic fix failed');
+            const result = await response.json();
+            normalizeSchema(result.schema || state.schema);
+            render();
+            state.fixingReview = false;
+            showReview(result.review || { issues: [] });
+            showToast(result.message || 'Automatic fix applied.');
+        } catch (error) {
+            showToast(error.message || 'Automatic fix failed.');
+        } finally {
+            state.fixingReview = false;
+            const fixableCount = (state.lastReviewResult?.issues || []).filter(item => item.canAutoFix).length;
+            elements.fixAllReviewBtn.disabled = fixableCount === 0;
+            elements.reviewIssues.querySelectorAll('button').forEach(button => button.disabled = false);
+        }
     }
 
     async function exportProject() {
@@ -538,6 +737,12 @@
     }
 
     document.addEventListener('click', event => {
+        const fixButton = event.target.closest('[data-fix-issue]');
+        if (fixButton) {
+            applyReviewFix(Number(fixButton.dataset.fixIssue), false);
+            return;
+        }
+
         const tableButton = event.target.closest('[data-select-table]');
         if (tableButton) {
             state.selectedTableId = tableButton.dataset.selectTable;
@@ -564,9 +769,10 @@
         if (event.target.closest('[data-delete-table]')) {
             const table = selectedTable();
             if (!table) return;
+            const tableReferenceName = table.name || table.lastValidName || '';
             state.schema.tables = state.schema.tables.filter(candidate => candidate.id !== table.id);
             state.schema.tables.forEach(candidate => candidate.columns.forEach(column => {
-                if (column.foreignKeyTable === table.name) {
+                if (tableReferenceName && column.foreignKeyTable === tableReferenceName) {
                     column.foreignKeyTable = '';
                     column.foreignKeyColumn = '';
                 }
@@ -593,10 +799,17 @@
 
         if (event.target.matches('[data-edit-table-name]') && table) {
             const oldName = table.name;
-            table.name = event.target.value;
-            state.schema.tables.forEach(candidate => candidate.columns.forEach(col => {
-                if (col.foreignKeyTable === oldName) col.foreignKeyTable = table.name;
-            }));
+            const oldReferenceName = oldName || table.lastValidName || '';
+            const newName = event.target.value;
+            table.name = newName;
+            if (newName.trim()) {
+                if (oldReferenceName.trim()) {
+                    state.schema.tables.forEach(candidate => candidate.columns.forEach(col => {
+                        if (col.foreignKeyTable === oldReferenceName) col.foreignKeyTable = newName;
+                    }));
+                }
+                table.lastValidName = newName;
+            }
             render();
         }
 
@@ -664,8 +877,8 @@
     document.addEventListener('pointermove', event => {
         if (!state.dragging) return;
         const drag = state.dragging;
-        drag.table.x = Math.max(24, Math.min(canvasSize.width - tableWidth - 24, drag.originX + event.clientX - drag.startX));
-        drag.table.y = Math.max(24, Math.min(canvasSize.height - 180, drag.originY + event.clientY - drag.startY));
+        drag.table.x = Math.max(24, Math.min(canvasSize.width - tableWidth - 24, drag.originX + (event.clientX - drag.startX) / state.zoom));
+        drag.table.y = Math.max(24, Math.min(canvasSize.height - 180, drag.originY + (event.clientY - drag.startY) / state.zoom));
         renderCanvasTables();
         renderRelations();
     });
@@ -675,14 +888,28 @@
     });
 
     elements.projectName.addEventListener('input', render);
+    elements.tableSearch.addEventListener('input', renderTableList);
     elements.importSqlBtn.addEventListener('click', importSql);
+    elements.openImportBtn.addEventListener('click', () => {
+        setSidebarTab('properties');
+        elements.sqlInput.focus();
+    });
     elements.addTableBtn.addEventListener('click', addTable);
-    elements.autoLayoutBtn.addEventListener('click', autoLayout);
+    elements.addTableListBtn.addEventListener('click', addTable);
+    elements.addCanvasTableBtn.addEventListener('click', addTable);
+    elements.deleteAllTablesBtn.addEventListener('click', deleteAllTables);
     elements.reviewBtn.addEventListener('click', reviewSchema);
+    elements.fixAllReviewBtn.addEventListener('click', () => applyReviewFix(null, true));
+    elements.autoLayoutBtn.addEventListener('click', autoLayout);
+    elements.zoomOutBtn.addEventListener('click', () => setZoom(state.zoom - 0.1));
+    elements.zoomInBtn.addEventListener('click', () => setZoom(state.zoom + 0.1));
+    elements.zoomFitBtn.addEventListener('click', () => setZoom(0.45));
+    elements.sidebarTabs.forEach(tab => tab.addEventListener('click', () => setSidebarTab(tab.dataset.sidebarTab)));
     elements.exportBtn.addEventListener('click', exportProject);
     elements.closeReviewBtn.addEventListener('click', () => elements.reviewOverlay.hidden = true);
 
     normalizeSchema(state.schema);
+    setSidebarTab('tables');
     render();
 })();
 </script>
