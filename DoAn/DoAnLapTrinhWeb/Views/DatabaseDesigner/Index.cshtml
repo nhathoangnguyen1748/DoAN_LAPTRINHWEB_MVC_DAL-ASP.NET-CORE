@@ -43,10 +43,21 @@
         </div>
 
         <div class="sidebar-pane" data-sidebar-pane="properties" hidden>
-            <label class="field-label" for="projectName">Project name</label>
-            <input id="projectName" class="text-input" value="GeneratedMvcApp" />
+            <div id="importPanel" class="import-panel" hidden>
+                <div class="panel-title-row compact">
+                    <div>
+                        <p class="section-kicker">Import SQL</p>
+                        <h2>Paste schema</h2>
+                    </div>
+                    <button id="closeImportPanelBtn" class="icon-btn small" type="button" aria-label="Close SQL import">x</button>
+                </div>
+                <label class="field-label" for="projectName">Project name</label>
+                <input id="projectName" class="text-input" value="GeneratedMvcApp" />
+                <textarea id="sqlInput" class="sql-input" spellcheck="false" placeholder="Paste CREATE TABLE statements here..."></textarea>
+                <button id="importSqlBtn" class="btn btn-primary" type="button">Import SQL</button>
+            </div>
 
-            <div class="sql-card">
+            <div class="sql-card utility-card" hidden>
                 <div class="panel-title-row compact">
                     <div>
                         <p class="section-kicker">SQL Import</p>
@@ -54,17 +65,9 @@
                     </div>
                     <span id="sqlStats" class="soft-pill">0 tables</span>
                 </div>
-                <textarea id="sqlInput" class="sql-input" spellcheck="false" placeholder="Paste CREATE TABLE statements here..."></textarea>
-                <button id="importSqlBtn" class="btn btn-primary" type="button">Import SQL</button>
             </div>
 
             <div class="properties-card">
-                <div class="panel-title-row compact">
-                    <div>
-                        <p class="section-kicker">Inspector</p>
-                        <h2>Properties</h2>
-                    </div>
-                </div>
                 <div id="inspectorContent" class="inspector-content"></div>
             </div>
         </div>
@@ -103,9 +106,10 @@
                     <span id="canvasTableCount" class="soft-pill">0 tables</span>
                     <span id="relationCount" class="soft-pill">0 relations</span>
                     <span class="soft-pill success-pill">routed lanes</span>
+                    <button id="focusSelectionBtn" class="soft-pill metric-button" type="button">Focus selection</button>
                     <div class="zoom-control" aria-label="Canvas zoom">
                         <button id="zoomOutBtn" type="button" aria-label="Zoom out">-</button>
-                        <span id="zoomValue">45%</span>
+                        <span id="zoomValue">48%</span>
                         <button id="zoomInBtn" type="button" aria-label="Zoom in">+</button>
                         <button id="zoomFitBtn" type="button">Fit view</button>
                     </div>
@@ -128,6 +132,11 @@
                         <p>Paste SQL or add tables manually to start designing.</p>
                     </div>
                 </div>
+            </div>
+            <div class="canvas-status-bar">
+                <span id="projectStatus">Project: GeneratedMvcApp</span>
+                <span>Tip: Ctrl + mouse wheel to zoom, drag table header to move. FK lines may cross, but lanes do not share the same track.</span>
+                <span id="selectedStatus">Selected: none</span>
             </div>
         </section>
     </main>
@@ -163,8 +172,8 @@
 (() => {
     const canvasSize = { width: 1800, height: 1200 };
     const tableWidth = 240;
-    const headerHeight = 58;
-    const rowHeight = 28;
+    const headerHeight = 52;
+    const rowHeight = 24;
     const state = {
         schema: { projectName: 'GeneratedMvcApp', tables: [] },
         selectedTableId: null,
@@ -172,13 +181,17 @@
         dragging: null,
         lastReviewResult: null,
         fixingReview: false,
-        zoom: 0.45
+        propertyTab: 'columns',
+        zoom: 0.48
     };
 
     const elements = {
         canvas: document.getElementById('canvas'),
+        canvasViewport: document.getElementById('canvasViewport'),
         projectName: document.getElementById('projectName'),
         sqlInput: document.getElementById('sqlInput'),
+        importPanel: document.getElementById('importPanel'),
+        closeImportPanelBtn: document.getElementById('closeImportPanelBtn'),
         tableSearch: document.getElementById('tableSearch'),
         importSqlBtn: document.getElementById('importSqlBtn'),
         openImportBtn: document.getElementById('openImportBtn'),
@@ -204,8 +217,11 @@
         zoomOutBtn: document.getElementById('zoomOutBtn'),
         zoomInBtn: document.getElementById('zoomInBtn'),
         zoomFitBtn: document.getElementById('zoomFitBtn'),
+        focusSelectionBtn: document.getElementById('focusSelectionBtn'),
         zoomValue: document.getElementById('zoomValue'),
         inspectorContent: document.getElementById('inspectorContent'),
+        projectStatus: document.getElementById('projectStatus'),
+        selectedStatus: document.getElementById('selectedStatus'),
         reviewOverlay: document.getElementById('reviewOverlay'),
         closeReviewBtn: document.getElementById('closeReviewBtn'),
         fixAllReviewBtn: document.getElementById('fixAllReviewBtn'),
@@ -294,6 +310,15 @@
             .map(column => ({ table, column })));
     }
 
+    function outgoingRelations(table) {
+        return table.columns.filter(column => column.foreignKeyTable);
+    }
+
+    function incomingRelations(table) {
+        const name = (table.name || '').toLowerCase();
+        return relationColumns().filter(relation => relation.column.foreignKeyTable.toLowerCase() === name);
+    }
+
     function showToast(message) {
         elements.toast.textContent = message;
         elements.toast.hidden = false;
@@ -346,7 +371,12 @@
         elements.canvasTableCount.textContent = `${state.schema.tables.length} tables`;
         elements.relationCount.textContent = `${relationColumns().length} relations`;
         const table = selectedTable();
-        elements.selectedTableSummary.textContent = table ? `${table.name || 'Untitled table'} selected` : 'No table selected';
+        const tableRelations = table ? outgoingRelations(table).length : 0;
+        elements.selectedTableSummary.innerHTML = table
+            ? `<span>${escapeHtml(table.name || 'Untitled table')}</span><strong>${table.columns.length} columns | ${tableRelations} relations</strong>`
+            : '<span>No table selected</span><strong>0 columns | 0 relations</strong>';
+        elements.projectStatus.textContent = `Project: ${state.schema.projectName || 'GeneratedMvcApp'}`;
+        elements.selectedStatus.textContent = table ? `Selected: ${table.name || 'Untitled table'}` : 'Selected: none';
         elements.emptyCanvas.hidden = state.schema.tables.length > 0;
         applyZoom();
         renderTableList();
@@ -362,6 +392,15 @@
                 table.name.toLowerCase().includes(query) ||
                 table.columns.some(column => column.name.toLowerCase().includes(query) || column.sqlType.toLowerCase().includes(query)))
             : state.schema.tables;
+        const preferredOrder = ['reviews', 'products', 'categories', 'cart_items', 'carts', 'order_items', 'users', 'orders', 'payments'];
+        const orderedTables = [...tables].sort((a, b) => {
+            const aIndex = preferredOrder.indexOf((a.name || '').toLowerCase());
+            const bIndex = preferredOrder.indexOf((b.name || '').toLowerCase());
+            if (aIndex !== -1 || bIndex !== -1) {
+                return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
+            }
+            return (a.name || '').localeCompare(b.name || '');
+        });
 
         if (state.schema.tables.length === 0) {
             elements.tableList.innerHTML = '<div class="empty-list">No tables yet.</div>';
@@ -373,13 +412,43 @@
             return;
         }
 
-        elements.tableList.innerHTML = tables.map(table => `
-            <button class="table-list-item ${table.id === state.selectedTableId ? 'active' : ''}" type="button" data-select-table="${table.id}">
-                <span class="table-list-chevron" aria-hidden="true">›</span>
-                <span class="table-list-name">${escapeHtml(table.name || 'Untitled table')}</span>
-                <small>${table.columns.length}</small>
-            </button>
-        `).join('');
+        elements.tableList.innerHTML = orderedTables.map(table => {
+            const isActive = table.id === state.selectedTableId;
+            const relationCount = outgoingRelations(table).length;
+            const apiReadyCount = Math.max(0, table.columns.length - relationCount);
+            const visibleColumns = [...table.columns].sort((a, b) => a.order - b.order).slice(0, 6);
+            const hiddenCount = Math.max(0, table.columns.length - visibleColumns.length);
+            const detail = isActive ? `
+                <div class="table-list-detail">
+                    <div class="table-list-stats">
+                        <span>${table.columns.length} cols</span>
+                        <span>${relationCount} FK</span>
+                        <span>${apiReadyCount} API</span>
+                    </div>
+                    <div class="table-list-columns">
+                        ${visibleColumns.map(column => `
+                            <span class="${column.isPrimaryKey ? 'pk' : column.foreignKeyTable ? 'fk' : ''}">
+                                ${column.isPrimaryKey ? 'key' : column.foreignKeyTable ? 'link' : 'dot'}
+                                ${escapeHtml(column.name)}
+                            </span>
+                        `).join('')}
+                        ${hiddenCount ? `<span class="more-count">+ ${hiddenCount} more</span>` : ''}
+                    </div>
+                    <button class="ai-config-pill" type="button" data-sidebar-tab-shortcut="properties">AI Config</button>
+                </div>
+            ` : '';
+
+            return `
+                <article class="table-list-record ${isActive ? 'active' : ''}">
+                    <button class="table-list-item ${isActive ? 'active' : ''}" type="button" data-select-table="${table.id}">
+                        <span class="table-list-chevron" aria-hidden="true">${isActive ? 'v' : '>'}</span>
+                        <span class="table-list-name">${escapeHtml(table.name || 'Untitled table')} ${isActive ? '<small>Selected</small>' : ''}</span>
+                        <strong>${table.columns.length}</strong>
+                    </button>
+                    ${detail}
+                </article>
+            `;
+        }).join('');
     }
 
     function renderCanvasTables() {
@@ -474,7 +543,11 @@
 
         if (!table) {
             elements.inspectorContent.innerHTML = `
-                <div class="empty-inspector">
+                <div class="property-shell empty-inspector">
+                    <div class="property-heading">
+                        <p class="section-kicker">Properties</p>
+                        <button class="icon-btn small" type="button" data-close-properties aria-label="Close properties">x</button>
+                    </div>
                     <h3>Select a table</h3>
                     <p>Click a table on the canvas to edit columns and relationships.</p>
                 </div>
@@ -482,6 +555,10 @@
             return;
         }
 
+        const tableRelations = outgoingRelations(table);
+        const tableIncoming = incomingRelations(table);
+        const apiReadyCount = Math.max(0, table.columns.length - tableRelations.length);
+        const relationCount = tableRelations.length + tableIncoming.length;
         const fkTableOptions = ['<option value="">No relationship</option>']
             .concat(state.schema.tables
                 .filter(candidate => candidate.id !== table.id)
@@ -494,54 +571,182 @@
         const fkColumnOptions = targetTable
             ? targetTable.columns.map(candidate => `<option value="${escapeHtml(candidate.name)}" ${column?.foreignKeyColumn === candidate.name ? 'selected' : ''}>${escapeHtml(candidate.name)}</option>`).join('')
             : '<option value="">Target column</option>';
+        const createTargetOptions = ['<option value="">Select target table</option>']
+            .concat(state.schema.tables
+                .filter(candidate => candidate.id !== table.id)
+                .map(candidate => `<option value="${escapeHtml(candidate.name)}">${escapeHtml(candidate.name)}</option>`))
+            .join('');
+        const tabs = ['columns', 'relations', 'overview'];
+        const tabButtons = tabs.map(tab => `
+            <button class="${state.propertyTab === tab ? 'active' : ''}" type="button" data-property-tab="${tab}">
+                ${tab[0].toUpperCase()}${tab.slice(1)}
+            </button>
+        `).join('');
+
+        const columnCards = table.columns
+            .sort((a, b) => a.order - b.order)
+            .map(col => {
+                const isActive = col.id === state.selectedColumnId;
+                const badges = [
+                    col.isPrimaryKey ? '<span class="status-badge gold">PK</span>' : '',
+                    col.isUnique ? '<span class="status-badge blue">Unique</span>' : '',
+                    !col.isNullable ? '<span class="status-badge red">Required</span>' : '',
+                    col.foreignKeyTable ? `<span class="status-badge green">FK: ${escapeHtml(col.foreignKeyTable)}.${escapeHtml(col.foreignKeyColumn || 'id')}</span>` : ''
+                ].filter(Boolean).join('');
+                const detail = isActive ? `
+                    <div class="column-inline-editor">
+                        <input class="text-input compact-input" data-edit-column-name value="${escapeHtml(col.name)}" />
+                        <input class="text-input compact-input" data-edit-column-type value="${escapeHtml(col.sqlType)}" />
+                        <div class="check-grid compact-checks">
+                            <label><input type="checkbox" data-edit-pk ${col.isPrimaryKey ? 'checked' : ''} /> PK</label>
+                            <label><input type="checkbox" data-edit-nullable ${col.isNullable ? 'checked' : ''} ${col.isPrimaryKey ? 'disabled' : ''} /> Nullable</label>
+                            <label><input type="checkbox" data-edit-unique ${col.isUnique ? 'checked' : ''} /> Unique</label>
+                        </div>
+                        <select class="text-input compact-input" data-edit-fk-table>${fkTableOptions}</select>
+                        <select class="text-input compact-input" data-edit-fk-column>${fkColumnOptions}</select>
+                    </div>
+                ` : '';
+
+                return `
+                    <article class="property-column-card ${isActive ? 'active' : ''}">
+                        <div class="property-column-head">
+                            <button type="button" data-select-column="${table.id}:${col.id}">
+                                <strong>${escapeHtml(col.name)}</strong>
+                                <span>${escapeHtml(col.sqlType)}</span>
+                            </button>
+                            <div class="column-card-actions">
+                                <button type="button" data-select-column="${table.id}:${col.id}" aria-label="Edit column">edit</button>
+                                <button type="button" data-delete-column-id="${col.id}" aria-label="Delete column">del</button>
+                            </div>
+                        </div>
+                        <div class="column-status-row">${badges || '<span class="status-badge">Optional</span>'}</div>
+                        ${detail}
+                    </article>
+                `;
+            }).join('');
+
+        const relationCards = tableRelations.length
+            ? tableRelations.map(item => `
+                <article class="relation-card">
+                    <div>
+                        <span class="relation-direction">Outgoing</span>
+                        <strong>${escapeHtml(table.name)}.${escapeHtml(item.name)} -></strong>
+                    </div>
+                    <a>${escapeHtml(item.foreignKeyTable)}.${escapeHtml(item.foreignKeyColumn || 'id')}</a>
+                    <button type="button" data-remove-relation="${item.id}">Remove</button>
+                </article>
+            `).join('')
+            : '<p class="muted small-copy">No outgoing relations for this table.</p>';
+
+        const propertyBody = state.propertyTab === 'relations' ? `
+            <div class="property-section-title">
+                <div>
+                    <h3>Relations</h3>
+                    <p>Foreign keys and relation creation</p>
+                </div>
+            </div>
+            <div class="relation-list">${relationCards}</div>
+            <div class="create-relation-card">
+                <h3>Create relation</h3>
+                <p>Pick target table and relation type.</p>
+                <select class="text-input compact-input" data-create-relation-target>${createTargetOptions}</select>
+                <select class="text-input compact-input" data-create-relation-type>
+                    <option>One to many</option>
+                    <option>One to one</option>
+                </select>
+                <div class="relation-preview">Choose a target table to preview the generated relation.</div>
+                <button class="btn btn-primary" type="button" data-create-relation>Create relation</button>
+            </div>
+        ` : state.propertyTab === 'overview' ? `
+            <div class="property-section-title">
+                <div>
+                    <h3>Overview</h3>
+                    <p>Essential table summary and actions</p>
+                </div>
+            </div>
+            <div class="overview-metrics">
+                <div><span>Columns</span><strong>${table.columns.length}</strong></div>
+                <div><span>Relations</span><strong>${relationCount}</strong></div>
+                <div><span>API ready</span><strong>${apiReadyCount}</strong></div>
+            </div>
+            <label class="field-label">Table name</label>
+            <input class="text-input compact-input" data-edit-table-name value="${escapeHtml(table.name)}" />
+            <div class="overview-actions">
+                <button class="btn btn-primary" type="button" data-add-column>AI Config</button>
+                <button class="btn btn-light" type="button" data-export-project>Export MVC</button>
+                <button class="btn btn-danger" type="button" data-delete-table>Delete table</button>
+            </div>
+        ` : `
+            <div class="property-section-title">
+                <div>
+                    <h3>Columns</h3>
+                    <p>Manage table fields</p>
+                </div>
+                <button class="btn btn-primary mini-add" type="button" data-add-column>+ Add</button>
+            </div>
+            <label class="search-field property-search">
+                <span aria-hidden="true"></span>
+                <input type="search" placeholder="Search columns" />
+            </label>
+            <div class="property-column-list">${columnCards || '<p class="muted small-copy">No columns yet.</p>'}</div>
+        `;
 
         elements.inspectorContent.innerHTML = `
-            <div class="editor-section">
-                <label class="field-label">Table name</label>
-                <input class="text-input" data-edit-table-name value="${escapeHtml(table.name)}" />
-                <div class="mini-actions">
-                    <button class="btn btn-light" type="button" data-add-column>Add column</button>
-                    <button class="btn btn-danger" type="button" data-delete-table>Delete table</button>
+            <div class="property-shell">
+                <div class="property-heading">
+                    <div>
+                        <p class="section-kicker">Properties</p>
+                        <h2>${escapeHtml(table.name || 'Untitled table')}</h2>
+                        <p>Inline table editor.</p>
+                    </div>
+                    <button class="icon-btn small" type="button" data-close-properties aria-label="Close properties">x</button>
                 </div>
+                <div class="property-chips">
+                    <span>Cols: ${table.columns.length}</span>
+                    <span>Rel: ${relationCount}</span>
+                    <span>API: ${apiReadyCount}</span>
+                </div>
+                <div class="property-tabs">${tabButtons}</div>
+                <div class="property-body">${propertyBody}</div>
             </div>
-            <div class="editor-section">
-                <h3>Columns</h3>
-                <div class="inspector-column-list">
-                    ${table.columns.map(col => `
-                        <button class="inspector-column ${col.id === state.selectedColumnId ? 'active' : ''}" type="button" data-select-column="${table.id}:${col.id}">
-                            <span>${escapeHtml(col.name)}</span><small>${escapeHtml(col.sqlType)}</small>
-                        </button>
-                    `).join('') || '<p class="muted">No columns yet.</p>'}
-                </div>
-            </div>
-            ${column ? `
-            <div class="editor-section">
-                <h3>Column detail</h3>
-                <label class="field-label">Column name</label>
-                <input class="text-input" data-edit-column-name value="${escapeHtml(column.name)}" />
-                <label class="field-label">SQL Server type</label>
-                <input class="text-input" data-edit-column-type value="${escapeHtml(column.sqlType)}" />
-                <div class="check-grid">
-                    <label><input type="checkbox" data-edit-pk ${column.isPrimaryKey ? 'checked' : ''} /> Primary key</label>
-                    <label><input type="checkbox" data-edit-nullable ${column.isNullable ? 'checked' : ''} ${column.isPrimaryKey ? 'disabled' : ''} /> Nullable</label>
-                    <label><input type="checkbox" data-edit-unique ${column.isUnique ? 'checked' : ''} /> Unique</label>
-                </div>
-                <label class="field-label">Relationship target table</label>
-                <select class="text-input" data-edit-fk-table>${fkTableOptions}</select>
-                <label class="field-label">Target column</label>
-                <select class="text-input" data-edit-fk-column>${fkColumnOptions}</select>
-                <button class="btn btn-danger wide" type="button" data-delete-column>Delete column</button>
-            </div>` : ''}
         `;
     }
 
-    function autoLayout() {
-        const roots = [...state.schema.tables].sort((a, b) => inboundCount(a) - inboundCount(b));
-        roots.forEach((table, index) => {
-            table.x = 120 + (index % 4) * 310;
-            table.y = 92 + Math.floor(index / 4) * 245;
+    function autoLayout(shouldRender = true) {
+        const preferredSlots = {
+            reviews: [88, 44],
+            cart_items: [88, 320],
+            order_items: [88, 600],
+            payments: [88, 880],
+            products: [430, 230],
+            carts: [430, 520],
+            orders: [430, 790],
+            categories: [790, 240],
+            users: [790, 640]
+        };
+        const usedSlots = new Set();
+        const fallbackSlots = [
+            [88, 44], [88, 320], [88, 600], [88, 880],
+            [430, 230], [430, 520], [430, 790],
+            [790, 240], [790, 640], [1110, 430]
+        ];
+
+        state.schema.tables.forEach((table, index) => {
+            const key = (table.name || '').toLowerCase();
+            const preferred = preferredSlots[key];
+            let slot = preferred && !usedSlots.has(preferred.join(':')) ? preferred : null;
+
+            if (!slot) {
+                slot = fallbackSlots.find(candidate => !usedSlots.has(candidate.join(':')))
+                    || [120 + (index % 4) * 330, 92 + Math.floor(index / 4) * 260];
+            }
+
+            usedSlots.add(slot.join(':'));
+            table.x = slot[0];
+            table.y = slot[1];
         });
-        render();
+
+        if (shouldRender) render();
     }
 
     function inboundCount(table) {
@@ -582,6 +787,20 @@
         render();
     }
 
+    function focusSelectedTable() {
+        const table = selectedTable();
+        if (!table) {
+            showToast('Select a table first.');
+            return;
+        }
+
+        elements.canvasViewport.scrollTo({
+            left: Math.max(0, table.x * state.zoom - elements.canvasViewport.clientWidth * 0.22),
+            top: Math.max(0, table.y * state.zoom - elements.canvasViewport.clientHeight * 0.22),
+            behavior: 'smooth'
+        });
+    }
+
     async function importSql() {
         const sql = elements.sqlInput.value.trim();
         if (!sql) {
@@ -598,8 +817,11 @@
             });
             if (!response.ok) throw new Error('Import failed');
             normalizeSchema(await response.json());
-            state.selectedTableId = state.schema.tables[0]?.id || null;
-            state.selectedColumnId = state.schema.tables[0]?.columns[0]?.id || null;
+            const preferredTable = state.schema.tables.find(table => (table.name || '').toLowerCase() === 'reviews') || state.schema.tables[0];
+            state.selectedTableId = preferredTable?.id || null;
+            state.selectedColumnId = preferredTable?.columns[0]?.id || null;
+            autoLayout(false);
+            elements.importPanel.hidden = true;
             setSidebarTab('tables');
             render();
             showToast(`Imported ${state.schema.tables.length} tables.`);
@@ -637,7 +859,7 @@
             }
             elements.reviewBtn.classList.remove('loading');
             elements.reviewBtn.disabled = false;
-            elements.reviewBtnText.textContent = 'AI Review Database';
+            elements.reviewBtnText.textContent = 'AI Review';
         }
     }
 
@@ -743,6 +965,60 @@
             return;
         }
 
+        const sidebarShortcut = event.target.closest('[data-sidebar-tab-shortcut]');
+        if (sidebarShortcut) {
+            setSidebarTab(sidebarShortcut.dataset.sidebarTabShortcut);
+            elements.importPanel.hidden = true;
+            renderInspector();
+            return;
+        }
+
+        const propertyTab = event.target.closest('[data-property-tab]');
+        if (propertyTab) {
+            state.propertyTab = propertyTab.dataset.propertyTab;
+            renderInspector();
+            return;
+        }
+
+        if (event.target.closest('[data-close-properties]')) {
+            setSidebarTab('tables');
+            return;
+        }
+
+        const removeRelationButton = event.target.closest('[data-remove-relation]');
+        if (removeRelationButton) {
+            const table = selectedTable();
+            const column = table?.columns.find(candidate => candidate.id === removeRelationButton.dataset.removeRelation);
+            if (column) {
+                column.foreignKeyTable = '';
+                column.foreignKeyColumn = '';
+                render();
+            }
+            return;
+        }
+
+        if (event.target.closest('[data-create-relation]')) {
+            const table = selectedTable();
+            const column = selectedColumn();
+            const targetName = elements.inspectorContent.querySelector('[data-create-relation-target]')?.value || '';
+            const targetTable = state.schema.tables.find(candidate => candidate.name === targetName);
+            if (!table || !column || !targetTable) {
+                showToast('Select a column and target table first.');
+                return;
+            }
+            column.foreignKeyTable = targetTable.name;
+            column.foreignKeyColumn = targetTable.columns.find(candidate => candidate.isPrimaryKey)?.name || targetTable.columns[0]?.name || 'id';
+            state.propertyTab = 'relations';
+            render();
+            showToast(`Created relation to ${targetTable.name}.`);
+            return;
+        }
+
+        if (event.target.closest('[data-export-project]')) {
+            exportProject();
+            return;
+        }
+
         const tableButton = event.target.closest('[data-select-table]');
         if (tableButton) {
             state.selectedTableId = tableButton.dataset.selectTable;
@@ -763,6 +1039,16 @@
         if (event.target.closest('[data-add-column]')) {
             const table = selectedTable();
             if (table) addColumn(table);
+            return;
+        }
+
+        const deleteColumnByIdButton = event.target.closest('[data-delete-column-id]');
+        if (deleteColumnByIdButton) {
+            const table = selectedTable();
+            if (!table) return;
+            table.columns = table.columns.filter(candidate => candidate.id !== deleteColumnByIdButton.dataset.deleteColumnId);
+            state.selectedColumnId = table.columns[0]?.id || null;
+            render();
             return;
         }
 
@@ -892,7 +1178,11 @@
     elements.importSqlBtn.addEventListener('click', importSql);
     elements.openImportBtn.addEventListener('click', () => {
         setSidebarTab('properties');
+        elements.importPanel.hidden = false;
         elements.sqlInput.focus();
+    });
+    elements.closeImportPanelBtn.addEventListener('click', () => {
+        elements.importPanel.hidden = true;
     });
     elements.addTableBtn.addEventListener('click', addTable);
     elements.addTableListBtn.addEventListener('click', addTable);
@@ -903,7 +1193,8 @@
     elements.autoLayoutBtn.addEventListener('click', autoLayout);
     elements.zoomOutBtn.addEventListener('click', () => setZoom(state.zoom - 0.1));
     elements.zoomInBtn.addEventListener('click', () => setZoom(state.zoom + 0.1));
-    elements.zoomFitBtn.addEventListener('click', () => setZoom(0.45));
+    elements.zoomFitBtn.addEventListener('click', () => setZoom(0.48));
+    elements.focusSelectionBtn.addEventListener('click', focusSelectedTable);
     elements.sidebarTabs.forEach(tab => tab.addEventListener('click', () => setSidebarTab(tab.dataset.sidebarTab)));
     elements.exportBtn.addEventListener('click', exportProject);
     elements.closeReviewBtn.addEventListener('click', () => elements.reviewOverlay.hidden = true);
