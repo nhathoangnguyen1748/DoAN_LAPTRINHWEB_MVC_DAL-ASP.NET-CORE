@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <DefaultItemExcludes>$(DefaultItemExcludes);DoAn/**;KiemTra/**;THLTW_NGUYENHOANGNHAT_1549/**;THUCHANH/**;ThuyetTrinh/**;Tuan*/**;WebBanHang/**</DefaultItemExcludes>
   </PropertyGroup>
 
 </Project>
