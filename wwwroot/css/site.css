@@ -265,6 +265,12 @@ button:disabled {
   align-items: center;
 }
 
+.review-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
 .soft-pill {
   display: inline-flex;
   align-items: center;
@@ -795,6 +801,14 @@ button:disabled {
   margin-bottom: 0.5rem;
 }
 
+.issue-card-header {
+  justify-content: space-between;
+}
+
+.issue-card-header>div {
+  min-width: 0;
+}
+
 .issue-card span {
   border-radius: 999px;
   padding: 0.2rem 0.45rem;
@@ -818,6 +832,22 @@ button:disabled {
 .review-empty span {
   color: #52647c;
   font-weight: 700;
+}
+
+.issue-fix-btn {
+  flex: 0 0 auto;
+  min-height: 36px;
+  border-radius: 12px;
+  padding: 0.45rem 0.75rem;
+}
+
+.issue-fix-note {
+  display: block;
+  margin-top: 0.55rem;
+  color: #0f58be;
+  font-size: 0.8rem;
+  font-style: normal;
+  font-weight: 800;
 }
 
 .toast-message {

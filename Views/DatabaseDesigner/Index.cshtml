@@ -1,17 +1,10 @@
-@{
+﻿@{
     ViewData["Title"] = "Database Designer";
 }
 
 <section class="designer-shell">
     <aside class="designer-panel designer-sidebar">
-        <div class="brand-block">
-            <span class="brand-mark">DB</span>
-            <div>
-                <p class="section-kicker">ASP.NET MVC Builder</p>
-                <h1>Database Designer</h1>
-                <p>Design schema first, review relationships with AI, then export ASP.NET Core MVC + SQL Server source.</p>
-            </div>
-        </div>
+  
 
         <label class="field-label" for="projectName">Project name</label>
         <input id="projectName" class="text-input" value="GeneratedMvcApp" />
@@ -97,7 +90,10 @@
                 <h2 id="reviewTitle">Relationship review</h2>
                 <p id="reviewSource">Database links only</p>
             </div>
-            <button id="closeReviewBtn" class="icon-btn" type="button" aria-label="Close review">×</button>
+            <div class="review-header-actions">
+                <button id="fixAllReviewBtn" class="btn btn-ai" type="button" hidden>Fix all</button>
+                <button id="closeReviewBtn" class="icon-btn" type="button" aria-label="Close review">×</button>
+            </div>
         </div>
         <div class="review-summary-grid">
             <div><strong id="issueTotal">0</strong><span>Issues</span></div>
@@ -122,7 +118,9 @@
         schema: { projectName: 'GeneratedMvcApp', tables: [] },
         selectedTableId: null,
         selectedColumnId: null,
-        dragging: null
+        dragging: null,
+        lastReviewResult: null,
+        fixingReview: false
     };
 
     const elements = {
@@ -144,6 +142,7 @@
         inspectorContent: document.getElementById('inspectorContent'),
         reviewOverlay: document.getElementById('reviewOverlay'),
         closeReviewBtn: document.getElementById('closeReviewBtn'),
+        fixAllReviewBtn: document.getElementById('fixAllReviewBtn'),
         reviewTitle: document.getElementById('reviewTitle'),
         reviewSource: document.getElementById('reviewSource'),
         issueTotal: document.getElementById('issueTotal'),
@@ -175,7 +174,8 @@
             projectName: schema.projectName || elements.projectName.value || 'GeneratedMvcApp',
             tables: (schema.tables || []).map((table, tableIndex) => ({
                 id: table.id || uid(),
-                name: table.name || `table_${tableIndex + 1}`,
+                name: table.name ?? `table_${tableIndex + 1}`,
+                lastValidName: table.lastValidName || table.name || `table_${tableIndex + 1}`,
                 x: Number.isFinite(Number(table.x)) ? Number(table.x) : 80 + (tableIndex % 3) * 380,
                 y: Number.isFinite(Number(table.y)) ? Number(table.y) : 80 + Math.floor(tableIndex / 3) * 320,
                 columns: (table.columns || []).map((column, columnIndex) => ({
@@ -192,8 +192,24 @@
             }))
         };
         elements.projectName.value = state.schema.projectName;
-        if (!state.selectedTableId && state.schema.tables.length > 0) {
+        if (state.schema.tables.length === 0) {
+            state.selectedTableId = null;
+            state.selectedColumnId = null;
+            return;
+        }
+
+        if (!state.schema.tables.some(table => table.id === state.selectedTableId)) {
             state.selectedTableId = state.schema.tables[0].id;
+        }
+        const table = state.schema.tables.find(candidate => candidate.id === state.selectedTableId);
+        if (!table) {
+            state.selectedTableId = null;
+            state.selectedColumnId = null;
+            return;
+        }
+
+        if (!table.columns.some(column => column.id === state.selectedColumnId)) {
+            state.selectedColumnId = table.columns[0]?.id || null;
         }
     }
 
@@ -401,6 +417,7 @@
         const table = {
             id: uid(),
             name: `new_table_${next}`,
+            lastValidName: `new_table_${next}`,
             x: 80 + ((next - 1) % 3) * 390,
             y: 80 + Math.floor((next - 1) / 3) * 330,
             columns: [{ id: uid(), name: 'id', sqlType: 'int', isPrimaryKey: true, isNullable: false, isUnique: false, foreignKeyTable: '', foreignKeyColumn: '', order: 0 }]
@@ -428,6 +445,267 @@
         render();
     }
 
+    function stripSqlComments(sql) {
+        return String(sql || '')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/(--|#).*?$/gm, '');
+    }
+
+    function findMatchingParenthesis(text, openIndex) {
+        let depth = 0;
+        let quote = null;
+        let inBracket = false;
+        for (let index = openIndex; index < text.length; index++) {
+            const character = text[index];
+            if (inBracket) {
+                if (character === ']') inBracket = false;
+                continue;
+            }
+            if (quote) {
+                if (character === quote) quote = null;
+                continue;
+            }
+            if (character === '[') {
+                inBracket = true;
+                continue;
+            }
+            if (character === '\'' || character === '"' || character === '`') {
+                quote = character;
+                continue;
+            }
+            if (character === '(') depth++;
+            if (character === ')') {
+                depth--;
+                if (depth === 0) return index;
+            }
+        }
+        return -1;
+    }
+
+    function splitTopLevel(text, separator) {
+        const parts = [];
+        let value = '';
+        let depth = 0;
+        let quote = null;
+        let inBracket = false;
+        for (const character of text) {
+            if (inBracket) {
+                value += character;
+                if (character === ']') inBracket = false;
+                continue;
+            }
+            if (quote) {
+                value += character;
+                if (character === quote) quote = null;
+                continue;
+            }
+            if (character === '[') {
+                inBracket = true;
+                value += character;
+                continue;
+            }
+            if (character === '\'' || character === '"' || character === '`') {
+                quote = character;
+                value += character;
+                continue;
+            }
+            if (character === '(') depth++;
+            if (character === ')' && depth > 0) depth--;
+            if (character === separator && depth === 0) {
+                parts.push(value);
+                value = '';
+            } else {
+                value += character;
+            }
+        }
+        if (value.trim()) parts.push(value);
+        return parts;
+    }
+
+    function normalizeSqlIdentifier(identifier) {
+        let value = String(identifier || '').trim().replace(/;$/, '').trim();
+        if ((value.startsWith('[') && value.endsWith(']')) ||
+            (value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith('`') && value.endsWith('`'))) {
+            value = value.slice(1, -1);
+        }
+        return value.trim();
+    }
+
+    function lastIdentifierPart(identifier) {
+        const parts = splitTopLevel(identifier, '.').map(normalizeSqlIdentifier).filter(Boolean);
+        return parts.at(-1) || normalizeSqlIdentifier(identifier);
+    }
+
+    function readIdentifierToken(text, startIndex = 0) {
+        let cursor = startIndex;
+        while (cursor < text.length && /\s/.test(text[cursor])) cursor++;
+        if (cursor >= text.length) return { token: '', end: cursor };
+        const first = text[cursor];
+        if (first === '[') {
+            const close = text.indexOf(']', cursor + 1);
+            if (close >= 0) return { token: text.slice(cursor, close + 1), end: close + 1 };
+        }
+        if (first === '"' || first === '`') {
+            const close = text.indexOf(first, cursor + 1);
+            if (close >= 0) return { token: text.slice(cursor, close + 1), end: close + 1 };
+        }
+        const start = cursor;
+        while (cursor < text.length && !/[\s(),;]/.test(text[cursor])) cursor++;
+        return { token: text.slice(start, cursor), end: cursor };
+    }
+
+    function readColumnsFromParentheses(text) {
+        const open = text.indexOf('(');
+        if (open < 0) return [];
+        const close = findMatchingParenthesis(text, open);
+        if (close <= open) return [];
+        return splitTopLevel(text.slice(open + 1, close), ',')
+            .map(column => lastIdentifierPart(column.trim()))
+            .filter(Boolean);
+    }
+
+    function stripConstraintName(definition) {
+        const trimmed = definition.trim();
+        if (!/^CONSTRAINT\b/i.test(trimmed)) return definition;
+        const name = readIdentifierToken(trimmed, 'CONSTRAINT'.length);
+        return trimmed.slice(name.end).trim();
+    }
+
+    function parseClientColumnDefinition(definition, order) {
+        const name = readIdentifierToken(definition, 0);
+        if (!name.token) return null;
+        const rest = definition.slice(name.end).trim();
+        const typeStopWords = new Set(['CONSTRAINT', 'PRIMARY', 'FOREIGN', 'REFERENCES', 'UNIQUE', 'NULL', 'NOT', 'DEFAULT', 'CHECK', 'COLLATE', 'GENERATED', 'IDENTITY', 'AUTO_INCREMENT', 'COMMENT', 'ON']);
+        const typeTokens = splitTopLevel(rest, ' ').map(token => token.trim()).filter(Boolean);
+        const sqlType = [];
+        for (const token of typeTokens) {
+            const keyword = token.toUpperCase();
+            if (typeStopWords.has(keyword) || (keyword === 'KEY' && sqlType.at(-1)?.toUpperCase() === 'PRIMARY')) break;
+            sqlType.push(token);
+        }
+        const references = rest.match(/\bREFERENCES\s+([a-zA-Z0-9_`"\[\]\.]+)(?:\s*\(([^)]+)\))?/i);
+        return {
+            id: uid(),
+            name: lastIdentifierPart(name.token),
+            sqlType: sqlType.join(' ').replace(/\s+/g, ' ') || 'nvarchar(255)',
+            isPrimaryKey: /\bPRIMARY\s+KEY\b/i.test(rest),
+            isNullable: !/\bNOT\s+NULL\b/i.test(rest) && !/\bPRIMARY\s+KEY\b/i.test(rest),
+            isUnique: /\bUNIQUE\b/i.test(rest),
+            foreignKeyTable: references ? lastIdentifierPart(references[1]) : '',
+            foreignKeyColumn: references?.[2] ? lastIdentifierPart(references[2]) : (references ? 'id' : ''),
+            order
+        };
+    }
+
+    function parseClientTableForeignKey(definition) {
+        const localColumns = readColumnsFromParentheses(definition);
+        const reference = definition.match(/\bREFERENCES\s+([a-zA-Z0-9_`"\[\]\.]+)([\s\S]*)/i);
+        if (!reference) return null;
+        const targetColumns = readColumnsFromParentheses(reference[2] || '');
+        return {
+            localColumns,
+            targetTable: lastIdentifierPart(reference[1]),
+            targetColumns: targetColumns.length ? targetColumns : ['id']
+        };
+    }
+
+    function parseSqlToTables(sqlText) {
+        const cleaned = stripSqlComments(sqlText);
+        const tables = [];
+        const createTableRegex = /\bCREATE\s+TABLE\b/gi;
+        let match;
+        while ((match = createTableRegex.exec(cleaned)) !== null) {
+            let cursor = match.index + match[0].length;
+            while (cursor < cleaned.length && /\s/.test(cleaned[cursor])) cursor++;
+            if (cleaned.slice(cursor).toUpperCase().startsWith('IF NOT EXISTS')) {
+                cursor += 'IF NOT EXISTS'.length;
+            }
+            const name = readIdentifierToken(cleaned, cursor);
+            cursor = name.end;
+            while (cursor < cleaned.length && /\s/.test(cleaned[cursor])) cursor++;
+            if (!name.token || cleaned[cursor] !== '(') continue;
+            const close = findMatchingParenthesis(cleaned, cursor);
+            if (close <= cursor) continue;
+
+            const table = {
+                id: uid(),
+                name: lastIdentifierPart(name.token),
+                lastValidName: lastIdentifierPart(name.token),
+                x: 0,
+                y: 0,
+                columns: []
+            };
+            const primaryKeys = [];
+            const foreignKeys = [];
+            const uniqueColumns = [];
+            let order = 0;
+
+            for (const rawDefinition of splitTopLevel(cleaned.slice(cursor + 1, close), ',')) {
+                const definition = stripConstraintName(rawDefinition).trim();
+                if (!definition) continue;
+                if (/^PRIMARY\b/i.test(definition)) {
+                    primaryKeys.push(...readColumnsFromParentheses(definition));
+                    continue;
+                }
+                if (/^FOREIGN\b/i.test(definition)) {
+                    const key = parseClientTableForeignKey(definition);
+                    if (key) foreignKeys.push(key);
+                    continue;
+                }
+                if (/^UNIQUE\b/i.test(definition)) {
+                    uniqueColumns.push(...readColumnsFromParentheses(definition));
+                    continue;
+                }
+                if (/^(CHECK|KEY)\b/i.test(definition)) continue;
+                const column = parseClientColumnDefinition(definition, order++);
+                if (column) table.columns.push(column);
+            }
+
+            for (const keyName of primaryKeys) {
+                const column = table.columns.find(candidate => candidate.name.toLowerCase() === keyName.toLowerCase());
+                if (column) {
+                    column.isPrimaryKey = true;
+                    column.isNullable = false;
+                }
+            }
+            for (const columnName of uniqueColumns) {
+                const column = table.columns.find(candidate => candidate.name.toLowerCase() === columnName.toLowerCase());
+                if (column) column.isUnique = true;
+            }
+            for (const key of foreignKeys) {
+                key.localColumns.forEach((columnName, index) => {
+                    const column = table.columns.find(candidate => candidate.name.toLowerCase() === columnName.toLowerCase());
+                    if (column) {
+                        column.foreignKeyTable = key.targetTable;
+                        column.foreignKeyColumn = key.targetColumns[index] || 'id';
+                    }
+                });
+            }
+            if (table.columns.length) tables.push(table);
+            createTableRegex.lastIndex = close + 1;
+        }
+        return tables;
+    }
+
+    function mergeImportedTables(tables) {
+        for (const table of tables) {
+            const baseName = table.name || 'table';
+            let uniqueName = baseName;
+            let suffix = 1;
+            while (state.schema.tables.some(existing => existing.name.toLowerCase() === uniqueName.toLowerCase())) {
+                uniqueName = `${baseName}_${suffix++}`;
+            }
+            table.name = uniqueName;
+            table.lastValidName = uniqueName;
+            state.schema.tables.push(table);
+        }
+        if (tables.length) {
+            state.selectedTableId = tables[0].id;
+            state.selectedColumnId = tables[0].columns[0]?.id || null;
+        }
+    }
+
     async function importSql() {
         const sql = elements.sqlInput.value.trim();
         if (!sql) {
@@ -449,7 +727,14 @@
             render();
             showToast(`Imported ${state.schema.tables.length} tables.`);
         } catch (error) {
-            showToast(error.message || 'Import failed.');
+            const parsedTables = parseSqlToTables(sql);
+            if (!parsedTables.length) {
+                showToast(error.message || 'Import failed.');
+            } else {
+                mergeImportedTables(parsedTables);
+                autoLayout();
+                showToast(`Imported ${parsedTables.length} tables with local SQL parser.`);
+            }
         } finally {
             elements.importSqlBtn.disabled = false;
         }
@@ -488,22 +773,66 @@
 
     function showReview(result) {
         const issues = result.issues || [];
+        const fixableCount = issues.filter(issue => issue.canAutoFix).length;
+        state.lastReviewResult = result;
         elements.reviewTitle.textContent = result.summary || 'Database review completed';
         elements.reviewSource.textContent = result.source || 'Database links only';
         elements.issueTotal.textContent = issues.length;
         elements.issueHigh.textContent = result.highCount ?? issues.filter(i => String(i.severity).toUpperCase() === 'HIGH').length;
         elements.issueMedium.textContent = result.mediumCount ?? issues.filter(i => String(i.severity).toUpperCase() === 'MEDIUM').length;
         elements.issueLow.textContent = result.lowCount ?? issues.filter(i => String(i.severity).toUpperCase() === 'LOW').length;
+        elements.fixAllReviewBtn.hidden = fixableCount === 0;
+        elements.fixAllReviewBtn.disabled = fixableCount === 0 || state.fixingReview;
+        elements.fixAllReviewBtn.textContent = `Fix all (${fixableCount})`;
         elements.reviewIssues.innerHTML = issues.length === 0
             ? '<div class="review-empty"><strong>Looks clean.</strong><span>No database relationship issue was found.</span></div>'
-            : issues.map(issue => `
+            : issues.map((issue, index) => `
                 <article class="issue-card ${String(issue.severity || '').toLowerCase()}">
-                    <div><span>${escapeHtml(issue.severity || 'LOW')}</span><strong>${escapeHtml(issue.type || 'ISSUE')}</strong></div>
+                    <div class="issue-card-header">
+                        <div><span>${escapeHtml(issue.severity || 'LOW')}</span><strong>${escapeHtml(issue.type || 'ISSUE')}</strong></div>
+                        ${issue.canAutoFix ? `<button class="btn btn-light issue-fix-btn" type="button" data-fix-issue="${index}">Fix issue</button>` : ''}
+                    </div>
                     <p>${escapeHtml(issue.message || '')}</p>
                     <small>${escapeHtml(issue.suggestion || '')}</small>
+                    ${issue.canAutoFix && issue.fixAction ? `<em class="issue-fix-note">${escapeHtml(issue.fixAction)}</em>` : ''}
                 </article>
             `).join('');
         elements.reviewOverlay.hidden = false;
+    }
+
+    async function applyReviewFix(issueIndex = null, fixAll = false) {
+        const issues = state.lastReviewResult?.issues || [];
+        const issue = fixAll ? null : issues[issueIndex];
+        if (!fixAll && !issue) {
+            showToast('Select an issue to fix.');
+            return;
+        }
+
+        state.fixingReview = true;
+        elements.fixAllReviewBtn.disabled = true;
+        elements.reviewIssues.querySelectorAll('button').forEach(button => button.disabled = true);
+
+        try {
+            const response = await fetch('/DatabaseDesigner/FixReview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ schema: state.schema, issue, fixAll })
+            });
+            if (!response.ok) throw new Error('Automatic fix failed');
+            const result = await response.json();
+            normalizeSchema(result.schema || state.schema);
+            render();
+            state.fixingReview = false;
+            showReview(result.review || { issues: [] });
+            showToast(result.message || 'Automatic fix applied.');
+        } catch (error) {
+            showToast(error.message || 'Automatic fix failed.');
+        } finally {
+            state.fixingReview = false;
+            const fixableCount = (state.lastReviewResult?.issues || []).filter(item => item.canAutoFix).length;
+            elements.fixAllReviewBtn.disabled = fixableCount === 0;
+            elements.reviewIssues.querySelectorAll('button').forEach(button => button.disabled = false);
+        }
     }
 
     async function exportProject() {
@@ -512,9 +841,7 @@
             return;
         }
 
-        const topBtn = document.getElementById('topExportBtn');
         elements.exportBtn.disabled = true;
-        if (topBtn) topBtn.disabled = true;
         try {
             const response = await fetch('/DatabaseDesigner/Export', {
                 method: 'POST',
@@ -536,11 +863,16 @@
             showToast(error.message || 'Export failed.');
         } finally {
             elements.exportBtn.disabled = false;
-            if (topBtn) topBtn.disabled = false;
         }
     }
 
     document.addEventListener('click', event => {
+        const fixButton = event.target.closest('[data-fix-issue]');
+        if (fixButton) {
+            applyReviewFix(Number(fixButton.dataset.fixIssue), false);
+            return;
+        }
+
         const tableButton = event.target.closest('[data-select-table]');
         if (tableButton) {
             state.selectedTableId = tableButton.dataset.selectTable;
@@ -567,9 +899,10 @@
         if (event.target.closest('[data-delete-table]')) {
             const table = selectedTable();
             if (!table) return;
+            const tableReferenceName = table.name || table.lastValidName || '';
             state.schema.tables = state.schema.tables.filter(candidate => candidate.id !== table.id);
             state.schema.tables.forEach(candidate => candidate.columns.forEach(column => {
-                if (column.foreignKeyTable === table.name) {
+                if (tableReferenceName && column.foreignKeyTable === tableReferenceName) {
                     column.foreignKeyTable = '';
                     column.foreignKeyColumn = '';
                 }
@@ -596,10 +929,17 @@
 
         if (event.target.matches('[data-edit-table-name]') && table) {
             const oldName = table.name;
-            table.name = event.target.value;
-            state.schema.tables.forEach(candidate => candidate.columns.forEach(col => {
-                if (col.foreignKeyTable === oldName) col.foreignKeyTable = table.name;
-            }));
+            const oldReferenceName = oldName || table.lastValidName || '';
+            const newName = event.target.value;
+            table.name = newName;
+            if (newName.trim()) {
+                if (oldReferenceName.trim()) {
+                    state.schema.tables.forEach(candidate => candidate.columns.forEach(col => {
+                        if (col.foreignKeyTable === oldReferenceName) col.foreignKeyTable = newName;
+                    }));
+                }
+                table.lastValidName = newName;
+            }
             render();
         }
 
@@ -680,10 +1020,10 @@
     elements.projectName.addEventListener('input', render);
     elements.importSqlBtn.addEventListener('click', importSql);
     elements.addTableBtn.addEventListener('click', addTable);
-    elements.autoLayoutBtn.addEventListener('click', autoLayout);
     elements.reviewBtn.addEventListener('click', reviewSchema);
+    elements.fixAllReviewBtn.addEventListener('click', () => applyReviewFix(null, true));
+    elements.autoLayoutBtn.addEventListener('click', autoLayout);
     elements.exportBtn.addEventListener('click', exportProject);
-    document.getElementById('topExportBtn')?.addEventListener('click', exportProject);
     elements.closeReviewBtn.addEventListener('click', () => elements.reviewOverlay.hidden = true);
 
     normalizeSchema(state.schema);
