@@ -2,12 +2,19 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using DoAnLapTrinhWeb.Models.Designer;
+using Microsoft.Extensions.Configuration;
 
 namespace DoAnLapTrinhWeb.Services;
 
 public sealed class SchemaReviewService
 {
     private static readonly HttpClient HttpClient = new();
+    private readonly IConfiguration _configuration;
+
+    public SchemaReviewService(IConfiguration configuration)
+    {
+        _configuration = configuration;
+    }
 
     private static readonly HashSet<string> ReservedNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -28,7 +35,9 @@ public sealed class SchemaReviewService
     {
         var safeSchema = schema ?? new DatabaseSchema();
         var deterministic = ReviewWithRules(safeSchema);
-        var apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY");
+        var apiKey = _configuration["Gemini:ApiKey"]
+                     ?? _configuration["GEMINI_API_KEY"]
+                     ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY");
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
@@ -148,6 +157,7 @@ public sealed class SchemaReviewService
         }
 
         ReviewRelationshipCycles(schema, result);
+        ReviewSemanticRelationships(schema, result);
 
         result.Summary = result.Issues.Count == 0
             ? "No database relationship issues were found."
@@ -354,6 +364,7 @@ public sealed class SchemaReviewService
         }
 
         ReviewColumnType(table, column, result);
+        ReviewLogicalColumnType(table, column, result);
 
         if (column.IsPrimaryKey && column.IsNullable)
         {
@@ -541,9 +552,137 @@ public sealed class SchemaReviewService
         }
     }
 
+    private static void ReviewLogicalColumnType(SchemaTable table, SchemaColumn column, AiReviewResult result)
+    {
+        var columnName = column.Name?.Trim() ?? string.Empty;
+        var sqlType = column.SqlType?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(columnName) || string.IsNullOrWhiteSpace(sqlType))
+        {
+            return;
+        }
+
+        if (columnName.Contains("email", StringComparison.OrdinalIgnoreCase))
+        {
+            var family = GetTypeFamily(sqlType);
+            if (family != "string")
+            {
+                AddIssue(
+                    result,
+                    "HIGH",
+                    "LOGICAL_TYPE_MISMATCH",
+                    $"Column '{table.Name}.{column.Name}' is named '{columnName}' but is typed as '{sqlType}'.",
+                    "Email addresses should be stored as string type (e.g. nvarchar(255)).",
+                    table: table.Name,
+                    column: column.Name,
+                    canAutoFix: true,
+                    fixAction: "Change column type to nvarchar(255).");
+            }
+        }
+        else if (columnName.Contains("password", StringComparison.OrdinalIgnoreCase))
+        {
+            var family = GetTypeFamily(sqlType);
+            if (family != "string" && family != "binary")
+            {
+                AddIssue(
+                    result,
+                    "HIGH",
+                    "LOGICAL_TYPE_MISMATCH",
+                    $"Column '{table.Name}.{column.Name}' is named '{columnName}' but is typed as '{sqlType}'.",
+                    "Password hashes/salts should be stored as string or binary type.",
+                    table: table.Name,
+                    column: column.Name,
+                    canAutoFix: true,
+                    fixAction: "Change column type to nvarchar(255).");
+            }
+            else if (family == "string")
+            {
+                var length = TryReadStringLength(sqlType);
+                if (length is not null and < 60 && !IsMaxLength(sqlType))
+                {
+                    AddIssue(
+                        result,
+                        "MEDIUM",
+                        "PASSWORD_LENGTH_WARNING",
+                        $"Column '{table.Name}.{column.Name}' has length {length}, which might be too short for secure password hashing (BCrypt/PBKDF2 require at least 60 characters).",
+                        "Change type to nvarchar(255) to support modern password hashing algorithms.",
+                        table: table.Name,
+                        column: column.Name,
+                        canAutoFix: true,
+                        fixAction: "Change type to nvarchar(255).");
+                }
+            }
+        }
+        else if (columnName.Contains("phone", StringComparison.OrdinalIgnoreCase) || columnName.Contains("telephone", StringComparison.OrdinalIgnoreCase) || columnName.Contains("mobile", StringComparison.OrdinalIgnoreCase))
+        {
+            var family = GetTypeFamily(sqlType);
+            if (family == "int" || family == "long" || family == "decimal" || family == "floating")
+            {
+                AddIssue(
+                    result,
+                    "MEDIUM",
+                    "LOGICAL_TYPE_MISMATCH",
+                    $"Column '{table.Name}.{column.Name}' is named '{columnName}' but uses numeric type '{sqlType}'.",
+                    "Phone numbers can contain leading zeros, country codes (+), or formatting (spaces, dashes). Store them as nvarchar(50).",
+                    table: table.Name,
+                    column: column.Name,
+                    canAutoFix: true,
+                    fixAction: "Change column type to nvarchar(50).");
+            }
+        }
+        else if (columnName.EndsWith("date", StringComparison.OrdinalIgnoreCase) || columnName.EndsWith("at", StringComparison.Ordinal) || columnName.Contains("time", StringComparison.OrdinalIgnoreCase))
+        {
+            if (columnName.Equals("Format", StringComparison.OrdinalIgnoreCase) || columnName.Equals("Cat", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            var isDateTimeFieldName = columnName.EndsWith("At", StringComparison.Ordinal) ||
+                                      columnName.EndsWith("Date", StringComparison.OrdinalIgnoreCase) ||
+                                      columnName.Contains("Created", StringComparison.OrdinalIgnoreCase) ||
+                                      columnName.Contains("Updated", StringComparison.OrdinalIgnoreCase) ||
+                                      columnName.Contains("Deleted", StringComparison.OrdinalIgnoreCase) ||
+                                      columnName.Contains("Timestamp", StringComparison.OrdinalIgnoreCase);
+
+            if (isDateTimeFieldName)
+            {
+                var family = GetTypeFamily(sqlType);
+                if (family != "datetime")
+                {
+                    AddIssue(
+                        result,
+                        "MEDIUM",
+                        "LOGICAL_TYPE_MISMATCH",
+                        $"Column '{table.Name}.{column.Name}' is named '{columnName}' but is typed as '{sqlType}'.",
+                        "Date or time columns should use datetime2 or datetime type.",
+                        table: table.Name,
+                        column: column.Name,
+                        canAutoFix: true,
+                        fixAction: "Change column type to datetime2.");
+                }
+            }
+        }
+        else if (columnName.StartsWith("is", StringComparison.OrdinalIgnoreCase) || columnName.StartsWith("has", StringComparison.OrdinalIgnoreCase))
+        {
+            var family = GetTypeFamily(sqlType);
+            if (family != "bool")
+            {
+                AddIssue(
+                    result,
+                    "LOW",
+                    "LOGICAL_TYPE_MISMATCH",
+                    $"Column '{table.Name}.{column.Name}' starts with '{columnName[..2]}' but is typed as '{sqlType}'.",
+                    "Boolean indicators should use bit or bool type.",
+                    table: table.Name,
+                    column: column.Name,
+                    canAutoFix: true,
+                    fixAction: "Change column type to bit.");
+            }
+        }
+    }
+
     private static void ReviewImplicitForeignKey(SchemaTable table, SchemaColumn column, DatabaseSchema schema, AiReviewResult result)
     {
-        if (column.IsPrimaryKey || !LooksLikeForeignKeyName(column.Name))
+        if (column.IsPrimaryKey || !LooksLikeForeignKeyName(column.Name, table.Name, schema))
         {
             return;
         }
@@ -551,6 +690,16 @@ public sealed class SchemaReviewService
         var target = FindImplicitForeignKeyTarget(table, column, schema);
         if (target is null)
         {
+            var impliedTableName = InferTableNameFromForeignKey(column.Name);
+            AddIssue(
+                result,
+                "MEDIUM",
+                "ORPHAN_FOREIGN_KEY",
+                $"Column '{table.Name}.{column.Name}' looks like a foreign key, but the referenced table '{impliedTableName}' does not exist in the schema.",
+                $"Create the table '{impliedTableName}' or rename this column if it does not represent a relationship.",
+                table: table.Name,
+                column: column.Name,
+                canAutoFix: false);
             return;
         }
 
@@ -619,6 +768,210 @@ public sealed class SchemaReviewService
                 canAutoFix: true,
                 fixAction: "Make one side of the cycle nullable.");
         }
+    }
+
+    private static readonly (string[] ChildKeywords, string[] ParentKeywords, string DefaultFkName)[] SemanticPairs = new[]
+    {
+        // SanPham -> NhaCungCap
+        (new[] { "SanPham", "Product" }, new[] { "NhaCungCap", "Supplier", "Vendor", "Provider" }, "MaNCC"),
+        // SanPham -> DanhMuc
+        (new[] { "SanPham", "Product" }, new[] { "DanhMuc", "Category", "Loai" }, "MaDM"),
+        // HoaDon/DonHang -> KhachHang
+        (new[] { "HoaDon", "DonHang", "Order", "Invoice" }, new[] { "KhachHang", "Customer", "Client" }, "MaKH"),
+        // HoaDon/DonHang -> NhanVien
+        (new[] { "HoaDon", "DonHang", "Order", "Invoice" }, new[] { "NhanVien", "Employee", "User" }, "MaNV"),
+        // NhanVien -> PhongBan
+        (new[] { "NhanVien", "Employee" }, new[] { "PhongBan", "Department" }, "MaPB")
+    };
+
+    private static bool AreTablesRelated(SchemaTable t1, SchemaTable t2, DatabaseSchema schema)
+    {
+        // 1. Direct relationship from t1 to t2
+        if (t1.Columns.Any(c => string.Equals(c.ForeignKeyTable, t2.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        // 2. Direct relationship from t2 to t1
+        if (t2.Columns.Any(c => string.Equals(c.ForeignKeyTable, t1.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        // 3. Indirect relationship via join table (N-N)
+        foreach (var table in schema.Tables)
+        {
+            if (table == t1 || table == t2) continue;
+            var hasFkToT1 = table.Columns.Any(c => string.Equals(c.ForeignKeyTable, t1.Name, StringComparison.OrdinalIgnoreCase));
+            var hasFkToT2 = table.Columns.Any(c => string.Equals(c.ForeignKeyTable, t2.Name, StringComparison.OrdinalIgnoreCase));
+            if (hasFkToT1 && hasFkToT2)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsDetailTable(string tableName)
+    {
+        if (string.IsNullOrWhiteSpace(tableName)) return false;
+        return tableName.StartsWith("ChiTiet", StringComparison.OrdinalIgnoreCase) ||
+               tableName.EndsWith("Detail", StringComparison.OrdinalIgnoreCase) ||
+               tableName.EndsWith("Details", StringComparison.OrdinalIgnoreCase) ||
+               tableName.EndsWith("Item", StringComparison.OrdinalIgnoreCase) ||
+               tableName.EndsWith("Items", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void ReviewSemanticRelationships(DatabaseSchema schema, AiReviewResult result)
+    {
+        // 1. Check dynamic ChiTiet[X] -> [X] relationships
+        foreach (var childTable in schema.Tables.Where(t => IsDetailTable(t.Name)))
+        {
+            string? parentCandidate = null;
+            string? defaultFkName = null;
+
+            var name = childTable.Name ?? string.Empty;
+            if (name.StartsWith("ChiTiet", StringComparison.OrdinalIgnoreCase) && name.Length > 7)
+            {
+                parentCandidate = name[7..]; // e.g. ChiTietSanPham -> SanPham
+            }
+            else if (name.EndsWith("Detail", StringComparison.OrdinalIgnoreCase) && name.Length > 6)
+            {
+                parentCandidate = name[..^6]; // e.g. OrderDetail -> Order
+            }
+            else if (name.EndsWith("Details", StringComparison.OrdinalIgnoreCase) && name.Length > 7)
+            {
+                parentCandidate = name[..^7]; // e.g. OrderDetails -> Order
+            }
+            else if (name.EndsWith("Item", StringComparison.OrdinalIgnoreCase) && name.Length > 4)
+            {
+                parentCandidate = name[..^4]; // e.g. OrderItem -> Order
+            }
+            else if (name.EndsWith("Items", StringComparison.OrdinalIgnoreCase) && name.Length > 5)
+            {
+                parentCandidate = name[..^5]; // e.g. OrderItems -> Order
+            }
+
+            if (parentCandidate != null)
+            {
+                var parentTable = schema.Tables.FirstOrDefault(t => 
+                    string.Equals(t.Name, parentCandidate, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(Singularize(t.Name), parentCandidate, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(Pluralize(t.Name), parentCandidate, StringComparison.OrdinalIgnoreCase));
+
+                if (parentTable != null && !AreTablesRelated(childTable, parentTable, schema))
+                {
+                    var parentPk = parentTable.Columns.FirstOrDefault(c => c.IsPrimaryKey);
+                    defaultFkName = parentPk?.Name ?? ("Ma" + GetInitials(parentTable.Name));
+
+                    AddIssue(
+                        result,
+                        "HIGH",
+                        "MISSING_RELATIONSHIP",
+                        $"Table '{childTable.Name}' and Table '{parentTable.Name}' should be related, but no relationship is configured.",
+                        $"Add a foreign key column '{defaultFkName}' to '{childTable.Name}' referencing '{parentTable.Name}'.",
+                        table: childTable.Name,
+                        column: defaultFkName,
+                        canAutoFix: true,
+                        fixAction: $"Add foreign key '{childTable.Name}.{defaultFkName}' referencing '{parentTable.Name}'.");
+                }
+            }
+        }
+
+        // 2. Check predefined semantic pairs
+        foreach (var pair in SemanticPairs)
+        {
+            var childTables = schema.Tables.Where(t => 
+                pair.ChildKeywords.Any(k => t.Name.Contains(k, StringComparison.OrdinalIgnoreCase)) &&
+                !IsDetailTable(t.Name)
+            ).ToList();
+            var parentTables = schema.Tables.Where(t => pair.ParentKeywords.Any(k => t.Name.Contains(k, StringComparison.OrdinalIgnoreCase))).ToList();
+
+            foreach (var childTable in childTables)
+            {
+                foreach (var parentTable in parentTables)
+                {
+                    if (childTable == parentTable) continue;
+
+                    if (string.Equals(childTable.Name, parentTable.Name, StringComparison.OrdinalIgnoreCase)) continue;
+
+                    if (!AreTablesRelated(childTable, parentTable, schema))
+                    {
+                        var parentPk = parentTable.Columns.FirstOrDefault(c => c.IsPrimaryKey);
+                        var fkName = parentPk?.Name ?? pair.DefaultFkName;
+
+                        AddIssue(
+                            result,
+                            "HIGH",
+                            "MISSING_RELATIONSHIP",
+                            $"Table '{childTable.Name}' and Table '{parentTable.Name}' should be related, but no relationship is configured.",
+                            $"Add a foreign key column '{fkName}' to '{childTable.Name}' referencing '{parentTable.Name}'.",
+                            table: childTable.Name,
+                            column: fkName,
+                            canAutoFix: true,
+                            fixAction: $"Add foreign key '{childTable.Name}.{fkName}' referencing '{parentTable.Name}'.");
+                    }
+                }
+            }
+        }
+    }
+
+    private static bool AddMissingRelationship(DatabaseSchema schema, ReviewIssue issue)
+    {
+        var childTable = FindTable(schema, issue.Table);
+        if (childTable is null || string.IsNullOrWhiteSpace(issue.Column))
+        {
+            return false;
+        }
+
+        var match = Regex.Match(issue.Message ?? string.Empty, @"Table '[^']+' and Table '([^']+)' should be related");
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        var parentTableName = match.Groups[1].Value;
+        var parentTable = FindTable(schema, parentTableName);
+        if (parentTable is null)
+        {
+            return false;
+        }
+
+        var parentPk = parentTable.Columns.FirstOrDefault(c => c.IsPrimaryKey)
+            ?? parentTable.Columns.FirstOrDefault(c => string.Equals(c.Name, "Id", StringComparison.OrdinalIgnoreCase));
+        if (parentPk is null)
+        {
+            return false;
+        }
+
+        var fkColumn = childTable.Columns.FirstOrDefault(c => string.Equals(c.Name, issue.Column, StringComparison.OrdinalIgnoreCase));
+        if (fkColumn is null)
+        {
+            var sqlType = parentPk.SqlType ?? "int";
+            if (sqlType.Contains("IDENTITY", StringComparison.OrdinalIgnoreCase))
+            {
+                sqlType = Regex.Replace(sqlType, @"\bIDENTITY\s*(\([^)]*\))?", "", RegexOptions.IgnoreCase).Trim();
+            }
+            if (string.IsNullOrWhiteSpace(sqlType))
+            {
+                sqlType = "int";
+            }
+
+            fkColumn = new SchemaColumn
+            {
+                Name = issue.Column,
+                SqlType = sqlType,
+                IsPrimaryKey = false,
+                IsNullable = false,
+                Order = childTable.Columns.Count
+            };
+            childTable.Columns.Add(fkColumn);
+        }
+
+        fkColumn.ForeignKeyTable = parentTable.Name;
+        fkColumn.ForeignKeyColumn = parentPk.Name;
+        return true;
     }
 
     private static int ApplyAllFixes(DatabaseSchema schema)
@@ -801,6 +1154,50 @@ public sealed class SchemaReviewService
                     return true;
                 });
 
+            case "LOGICAL_TYPE_MISMATCH":
+                return UpdateColumn(schema, issue.Table, issue.Column, column =>
+                {
+                    var name = column.Name?.Trim() ?? string.Empty;
+                    var targetType = "nvarchar(255)";
+                    if (name.Contains("email", StringComparison.OrdinalIgnoreCase) || name.Contains("password", StringComparison.OrdinalIgnoreCase))
+                    {
+                        targetType = "nvarchar(255)";
+                    }
+                    else if (name.Contains("phone", StringComparison.OrdinalIgnoreCase) || name.Contains("telephone", StringComparison.OrdinalIgnoreCase) || name.Contains("mobile", StringComparison.OrdinalIgnoreCase))
+                    {
+                        targetType = "nvarchar(50)";
+                    }
+                    else if (name.EndsWith("At", StringComparison.Ordinal) || name.EndsWith("Date", StringComparison.OrdinalIgnoreCase) || name.Contains("Created", StringComparison.OrdinalIgnoreCase) || name.Contains("Updated", StringComparison.OrdinalIgnoreCase) || name.Contains("Deleted", StringComparison.OrdinalIgnoreCase) || name.Contains("Timestamp", StringComparison.OrdinalIgnoreCase))
+                    {
+                        targetType = "datetime2";
+                    }
+                    else if (name.StartsWith("is", StringComparison.OrdinalIgnoreCase) || name.StartsWith("has", StringComparison.OrdinalIgnoreCase))
+                    {
+                        targetType = "bit";
+                    }
+
+                    if (string.Equals(column.SqlType, targetType, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
+                    column.SqlType = targetType;
+                    return true;
+                });
+
+            case "PASSWORD_LENGTH_WARNING":
+                return UpdateColumn(schema, issue.Table, issue.Column, column =>
+                {
+                    if (string.Equals(column.SqlType, "nvarchar(255)", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
+                    column.SqlType = "nvarchar(255)";
+                    return true;
+                });
+
+            case "MISSING_RELATIONSHIP":
+                return AddMissingRelationship(schema, issue);
+
             default:
                 return false;
         }
@@ -938,15 +1335,32 @@ public sealed class SchemaReviewService
             return false;
         }
 
-        var existingId = table.Columns.FirstOrDefault(column => string.Equals(column.Name, "Id", StringComparison.OrdinalIgnoreCase));
-        if (existingId is not null)
+        // Find existing candidate columns in order of preference:
+        // 1. "Id"
+        // 2. TableName + "Id" (e.g., "DanhMucId" in "DanhMuc")
+        // 3. "Ma" + TableName (e.g., "MaDanhMuc" in "DanhMuc")
+        // 4. "Ma" + GetInitials(TableName) (e.g., "MaDM" in "DanhMuc")
+        // 5. Any column that looks like a foreign key/identifier (starts with "Ma" + uppercase, or ends with "Id")
+        var initials = GetInitials(table.Name);
+        var pkCandidate = table.Columns.FirstOrDefault(column => 
+            string.Equals(column.Name, "Id", StringComparison.OrdinalIgnoreCase))
+            ?? table.Columns.FirstOrDefault(column => 
+                string.Equals(column.Name, table.Name + "Id", StringComparison.OrdinalIgnoreCase))
+            ?? table.Columns.FirstOrDefault(column => 
+                string.Equals(column.Name, "Ma" + table.Name, StringComparison.OrdinalIgnoreCase))
+            ?? table.Columns.FirstOrDefault(column => 
+                !string.IsNullOrEmpty(initials) && string.Equals(column.Name, "Ma" + initials, StringComparison.OrdinalIgnoreCase))
+            ?? table.Columns.FirstOrDefault(column => 
+                column.Name.EndsWith("Id", StringComparison.OrdinalIgnoreCase) || IsVietnameseForeignKeyPrefix(column.Name));
+
+        if (pkCandidate is not null)
         {
-            existingId.IsPrimaryKey = true;
-            existingId.IsNullable = false;
-            existingId.IsUnique = false;
-            if (string.IsNullOrWhiteSpace(existingId.SqlType))
+            pkCandidate.IsPrimaryKey = true;
+            pkCandidate.IsNullable = false;
+            pkCandidate.IsUnique = false;
+            if (string.IsNullOrWhiteSpace(pkCandidate.SqlType))
             {
-                existingId.SqlType = "int";
+                pkCandidate.SqlType = "int";
             }
 
             return true;
@@ -1299,7 +1713,14 @@ public sealed class SchemaReviewService
             return relation.Value.TargetColumn.SqlType;
         }
 
-        if (column.IsPrimaryKey || string.Equals(column.Name, "Id", StringComparison.OrdinalIgnoreCase) || LooksLikeForeignKeyName(column.Name))
+        if (column.IsPrimaryKey || 
+            string.Equals(column.Name, "Id", StringComparison.OrdinalIgnoreCase) || 
+            LooksLikeForeignKeyName(column.Name, tableName, schema) ||
+            (tableName != null && (
+                string.Equals(column.Name, tableName + "Id", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(column.Name, "Ma" + tableName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(column.Name, "Ma" + GetInitials(tableName), StringComparison.OrdinalIgnoreCase)
+            )))
         {
             return "int";
         }
@@ -1309,27 +1730,97 @@ public sealed class SchemaReviewService
 
     private static string InferTableNameFromForeignKey(string? columnName)
     {
-        if (!LooksLikeForeignKeyName(columnName))
+        if (string.IsNullOrWhiteSpace(columnName))
         {
             return string.Empty;
         }
 
-        return Pluralize(columnName![..^2]);
+        var cleanName = columnName;
+        if (cleanName.EndsWith("Id", StringComparison.OrdinalIgnoreCase))
+        {
+            cleanName = cleanName[..^2];
+        }
+        if (cleanName.EndsWith("_", StringComparison.Ordinal))
+        {
+            cleanName = cleanName[..^1];
+        }
+        if (IsVietnameseForeignKeyPrefix(cleanName))
+        {
+            cleanName = cleanName[2..];
+        }
+        if (cleanName.StartsWith("_", StringComparison.Ordinal))
+        {
+            cleanName = cleanName[1..];
+        }
+
+        return Pluralize(cleanName);
     }
 
     private static (SchemaTable TargetTable, SchemaColumn TargetColumn)? FindImplicitForeignKeyTarget(SchemaTable sourceTable, SchemaColumn column, DatabaseSchema schema)
     {
-        if (!LooksLikeForeignKeyName(column.Name))
+        if (!LooksLikeForeignKeyName(column.Name, sourceTable.Name, schema))
         {
             return null;
         }
 
-        var prefix = column.Name[..^2];
+        // 1. First search for a matching primary key name in another table (e.g. MaNCC in SanPham matches MaNCC in NhaCungCap)
+        foreach (var table in schema.Tables)
+        {
+            if (table == sourceTable) continue;
+            var targetCol = table.Columns.FirstOrDefault(c => c.IsPrimaryKey && string.Equals(c.Name, column.Name, StringComparison.OrdinalIgnoreCase));
+            if (targetCol is not null)
+            {
+                return (table, targetCol);
+            }
+        }
+
+        // 2. Next, strip standard prefixes/suffixes and search by table name/abbreviation
+        var cleanName = column.Name;
+        if (cleanName.EndsWith("Id", StringComparison.OrdinalIgnoreCase))
+        {
+            cleanName = cleanName[..^2];
+        }
+        if (cleanName.EndsWith("_", StringComparison.Ordinal))
+        {
+            cleanName = cleanName[..^1];
+        }
+        if (IsVietnameseForeignKeyPrefix(cleanName))
+        {
+            cleanName = cleanName[2..];
+        }
+        if (cleanName.StartsWith("_", StringComparison.Ordinal))
+        {
+            cleanName = cleanName[1..];
+        }
+
+        if (string.IsNullOrWhiteSpace(cleanName))
+        {
+            return null;
+        }
+
         var targetTable = schema.Tables.FirstOrDefault(table =>
-            table != sourceTable &&
-            (string.Equals(table.Name, prefix, StringComparison.OrdinalIgnoreCase) ||
-             string.Equals(Singularize(table.Name), prefix, StringComparison.OrdinalIgnoreCase) ||
-             string.Equals(table.Name, Pluralize(prefix), StringComparison.OrdinalIgnoreCase)));
+        {
+            if (table == sourceTable) return false;
+
+            var tableName = table.Name ?? string.Empty;
+            var singular = Singularize(tableName);
+            var plural = Pluralize(tableName);
+
+            if (string.Equals(tableName, cleanName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(singular, cleanName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(plural, cleanName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var initials = GetInitials(tableName);
+            if (string.Equals(initials, cleanName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return false;
+        });
 
         if (targetTable is null)
         {
@@ -1337,7 +1828,9 @@ public sealed class SchemaReviewService
         }
 
         var targetColumn = targetTable.Columns.FirstOrDefault(candidate => candidate.IsPrimaryKey)
-            ?? targetTable.Columns.FirstOrDefault(candidate => string.Equals(candidate.Name, "Id", StringComparison.OrdinalIgnoreCase));
+            ?? targetTable.Columns.FirstOrDefault(candidate => string.Equals(candidate.Name, "Id", StringComparison.OrdinalIgnoreCase))
+            ?? targetTable.Columns.FirstOrDefault(candidate => string.Equals(candidate.Name, "Ma" + targetTable.Name, StringComparison.OrdinalIgnoreCase))
+            ?? targetTable.Columns.FirstOrDefault(candidate => string.Equals(candidate.Name, "Ma" + GetInitials(targetTable.Name), StringComparison.OrdinalIgnoreCase));
 
         if (targetColumn is null)
         {
@@ -1347,12 +1840,79 @@ public sealed class SchemaReviewService
         return (targetTable, targetColumn);
     }
 
-    private static bool LooksLikeForeignKeyName(string? columnName)
+    private static bool LooksLikeForeignKeyName(string? columnName, string? currentTableName, DatabaseSchema schema)
     {
-        return !string.IsNullOrWhiteSpace(columnName) &&
+        if (string.IsNullOrWhiteSpace(columnName)) return false;
+
+        // If the column name matches the own-table primary key patterns, it's not a foreign key
+        if (!string.IsNullOrWhiteSpace(currentTableName))
+        {
+            var initials = GetInitials(currentTableName);
+            if (string.Equals(columnName, "Id", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(columnName, currentTableName + "Id", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(columnName, "Ma" + currentTableName, StringComparison.OrdinalIgnoreCase) ||
+                (!string.IsNullOrEmpty(initials) && string.Equals(columnName, "Ma" + initials, StringComparison.OrdinalIgnoreCase)))
+            {
+                return false;
+            }
+        }
+
+        // 1. Standard English EndsWith("Id")
+        if (columnName.Length > 2 && columnName.EndsWith("Id", StringComparison.OrdinalIgnoreCase) && !string.Equals(columnName, "Id", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // 2. Vietnamese "Ma" + uppercase abbreviation (e.g. "MaNCC", "MaDM", "MaKH") but NOT "MauSac", "MaTroi"
+        if (IsVietnameseForeignKeyPrefix(columnName))
+        {
+            return true;
+        }
+
+        // 3. Exact match with a primary key in another table
+        if (schema != null)
+        {
+            foreach (var table in schema.Tables)
+            {
+                if (string.Equals(table.Name, currentTableName, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var hasMatchingPk = table.Columns.Any(col =>
+                    col.IsPrimaryKey &&
+                    string.Equals(col.Name, columnName, StringComparison.OrdinalIgnoreCase));
+
+                if (hasMatchingPk)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static string GetInitials(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var initials = new string(value.Where(char.IsUpper).ToArray());
+        if (string.IsNullOrEmpty(initials))
+        {
+            return value[0].ToString().ToUpperInvariant();
+        }
+        return initials.ToUpperInvariant();
+    }
+
+    private static bool IsVietnameseForeignKeyPrefix(string? columnName)
+    {
+        // Vietnamese FK convention: "Ma" followed by an UPPERCASE letter
+        // e.g. MaDM ✅, MaNCC ✅, MaSP ✅, MaKH ✅
+        // but  MauSac ❌, MaTroi ❌ (lowercase after Ma = regular word)
+        return columnName is not null &&
                columnName.Length > 2 &&
-               columnName.EndsWith("Id", StringComparison.OrdinalIgnoreCase) &&
-               !string.Equals(columnName, "Id", StringComparison.OrdinalIgnoreCase);
+               columnName.StartsWith("Ma", StringComparison.Ordinal) &&
+               char.IsUpper(columnName[2]);
     }
 
     private static bool AreTypesCompatible(string left, string right)
@@ -1560,11 +2120,13 @@ public sealed class SchemaReviewService
         var schemaJson = JsonSerializer.Serialize(schema, new JsonSerializerOptions { WriteIndented = true });
         var ruleJson = JsonSerializer.Serialize(deterministic.Issues, new JsonSerializerOptions { WriteIndented = true });
 
-        var prompt = "You are reviewing only a database schema for an ASP.NET Core MVC + SQL Server project. " +
+        var prompt = "You are reviewing a database schema for an ASP.NET Core MVC + SQL Server project. " +
                      "Do not review UI, APIs, documentation, security policies, or unrelated product ideas. " +
                      "Return strict JSON matching this shape: {\"summary\":string,\"source\":string,\"issues\":[{\"severity\":\"HIGH|MEDIUM|LOW\",\"type\":string,\"table\":string|null,\"column\":string|null,\"message\":string,\"suggestion\":string,\"canAutoFix\":false,\"fixAction\":string}]}. " +
                      "Only set canAutoFix to false for issues you add yourself; deterministic issues below already include fix metadata. " +
-                     "Focus on primary keys, foreign keys, relationship direction, type compatibility, nullable relationship columns, duplicate names, SQL Server type correctness, generated Entity Framework model correctness, and insert-order relationship cycles.\n\n" +
+                     "Focus on primary keys, foreign keys, relationship direction, type compatibility, nullable relationship columns, duplicate names, SQL Server type correctness, generated Entity Framework model correctness, and insert-order relationship cycles. " +
+                     "CRITICAL: Look carefully for missing or deleted relationships. If a table contains a column ending in 'Id', 'ID', or '_id' (like 'userId', 'user_id') but it has no foreign key relationship configured, or if the relationship points to a table that has been deleted or does not exist, flag it as an issue. " +
+                     "Also detect logical/semantic errors in columns (e.g. 'Email' should be string type, 'Password' hashes should be string/binary with sufficient length, 'Phone' should be string to preserve formatting, timestamps/date fields should be datetime/datetime2, boolean flags should be bit/bool), and suggest recommendations to fix them.\n\n" +
                      "Schema JSON:\n" + schemaJson + "\n\nDeterministic rule issues already found:\n" + ruleJson;
 
         var payload = new
