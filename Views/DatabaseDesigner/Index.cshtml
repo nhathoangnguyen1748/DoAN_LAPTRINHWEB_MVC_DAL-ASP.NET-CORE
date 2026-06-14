@@ -1,4 +1,4 @@
-﻿@{
+@{
     ViewData["Title"] = "Database Designer";
 }
 
@@ -107,6 +107,21 @@
 
 <div id="toast" class="toast-message" hidden></div>
 
+<div id="importConfirmOverlay" class="review-overlay" hidden>
+    <div class="review-dialog" style="max-width: 480px; text-align: center; padding: 2rem;">
+        <div style="margin-bottom: 1.5rem;">
+            <p class="section-kicker" style="justify-content: center;">SQL Import</p>
+            <h2 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Import Options</h2>
+            <p style="color: var(--muted); font-size: 0.9rem;">Choose how you want to import the new tables into the database schema.</p>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.5rem;">
+            <button id="importOverwriteBtn" class="btn btn-danger" type="button">Overwrite Schema</button>
+            <button id="importMergeBtn" class="btn btn-primary" type="button" style="margin-top: 0;">Merge Tables</button>
+        </div>
+        <button id="importCancelBtn" class="btn btn-light wide" type="button" style="margin-top: 1rem; width: 100%;">Cancel</button>
+    </div>
+</div>
+
 @section Scripts {
 <script>
 (() => {
@@ -150,7 +165,11 @@
         issueMedium: document.getElementById('issueMedium'),
         issueLow: document.getElementById('issueLow'),
         reviewIssues: document.getElementById('reviewIssues'),
-        toast: document.getElementById('toast')
+        toast: document.getElementById('toast'),
+        importConfirmOverlay: document.getElementById('importConfirmOverlay'),
+        importOverwriteBtn: document.getElementById('importOverwriteBtn'),
+        importMergeBtn: document.getElementById('importMergeBtn'),
+        importCancelBtn: document.getElementById('importCancelBtn')
     };
 
     function uid() {
@@ -706,7 +725,8 @@
         }
     }
 
-    async function importSql() {
+    async function executeImport(mode) {
+        elements.importConfirmOverlay.hidden = true;
         const sql = elements.sqlInput.value.trim();
         if (!sql) {
             showToast('Paste SQL before importing.');
@@ -721,22 +741,54 @@
                 body: JSON.stringify({ sql, projectName: elements.projectName.value })
             });
             if (!response.ok) throw new Error('Import failed');
-            normalizeSchema(await response.json());
-            state.selectedTableId = state.schema.tables[0]?.id || null;
-            state.selectedColumnId = state.schema.tables[0]?.columns[0]?.id || null;
-            render();
-            showToast(`Imported ${state.schema.tables.length} tables.`);
+            const importedSchema = await response.json();
+            const importedTables = importedSchema.tables || [];
+
+            if (importedTables.length === 0) {
+                showToast('No tables found in the provided SQL.');
+                return;
+            }
+
+            if (mode === 'overwrite') {
+                normalizeSchema(importedSchema);
+            } else {
+                mergeImportedTables(importedTables);
+            }
+
+            autoLayout();
+            showToast(mode === 'overwrite'
+                ? `Imported and overwrote schema with ${importedTables.length} tables.`
+                : `Merged ${importedTables.length} new tables into schema.`);
         } catch (error) {
             const parsedTables = parseSqlToTables(sql);
             if (!parsedTables.length) {
                 showToast(error.message || 'Import failed.');
             } else {
+                if (mode === 'overwrite') {
+                    state.schema.tables = [];
+                }
                 mergeImportedTables(parsedTables);
                 autoLayout();
-                showToast(`Imported ${parsedTables.length} tables with local SQL parser.`);
+                showToast(mode === 'overwrite'
+                    ? `Imported and overwrote schema with ${parsedTables.length} tables (local SQL parser).`
+                    : `Merged ${parsedTables.length} new tables into schema (local SQL parser).`);
             }
         } finally {
             elements.importSqlBtn.disabled = false;
+        }
+    }
+
+    function importSql() {
+        const sql = elements.sqlInput.value.trim();
+        if (!sql) {
+            showToast('Paste SQL before importing.');
+            return;
+        }
+
+        if (state.schema.tables.length === 0) {
+            executeImport('overwrite');
+        } else {
+            elements.importConfirmOverlay.hidden = false;
         }
     }
 
@@ -1019,6 +1071,11 @@
 
     elements.projectName.addEventListener('input', render);
     elements.importSqlBtn.addEventListener('click', importSql);
+    elements.importOverwriteBtn.addEventListener('click', () => executeImport('overwrite'));
+    elements.importMergeBtn.addEventListener('click', () => executeImport('merge'));
+    elements.importCancelBtn.addEventListener('click', () => {
+        elements.importConfirmOverlay.hidden = true;
+    });
     elements.addTableBtn.addEventListener('click', addTable);
     elements.reviewBtn.addEventListener('click', reviewSchema);
     elements.fixAllReviewBtn.addEventListener('click', () => applyReviewFix(null, true));
