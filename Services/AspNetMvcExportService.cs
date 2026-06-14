@@ -1,4 +1,4 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
 using DoAnLapTrinhWeb.Models.Designer;
@@ -53,7 +53,6 @@ public sealed class AspNetMvcExportService
                 {
                     Id = string.IsNullOrWhiteSpace(table.Id) ? Guid.NewGuid().ToString("N") : table.Id,
                     Name = table.Name.Trim(),
-                    LastValidName = string.IsNullOrWhiteSpace(table.LastValidName) ? table.Name.Trim() : table.LastValidName.Trim(),
                     X = table.X,
                     Y = table.Y,
                     Columns = table.Columns
@@ -166,7 +165,7 @@ app.Run();
         return $$"""
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Server=localhost,1433;Database={{projectName}}Db;User Id=sa;Password=YourStrong!Passw0rd;TrustServerCertificate=True;MultipleActiveResultSets=true"
+    "DefaultConnection": "Server=103.72.56.55,2025;Database={{projectName}}Db;User Id=sa;Password=!Pass123;TrustServerCertificate=True;MultipleActiveResultSets=true"
   },
   "Logging": {
     "LogLevel": {
@@ -422,12 +421,6 @@ public static class DatabaseBootstrapper
 {
     public static async Task ApplyAsync(WebApplication app)
     {
-        var shouldApply = bool.TryParse(Environment.GetEnvironmentVariable("AUTO_APPLY_DATABASE"), out var enabled) && enabled;
-        if (!shouldApply)
-        {
-            return;
-        }
-
         using var scope = app.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 

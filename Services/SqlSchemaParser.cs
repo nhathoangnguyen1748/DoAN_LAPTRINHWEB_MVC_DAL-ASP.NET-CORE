@@ -38,7 +38,6 @@ public sealed class SqlSchemaParser
             {
                 Name = NormalizeIdentifier(GetLastIdentifierPart(rawTableName))
             };
-            table.LastValidName = table.Name;
 
             var definitions = SplitTopLevel(body, ',');
             var pendingPrimaryKeys = new List<string>();
