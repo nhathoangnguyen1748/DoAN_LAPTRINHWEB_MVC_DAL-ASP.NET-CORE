@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   --ink: #111827;
   --muted: #64748b;
   --faint: #8fa1bb;
@@ -112,7 +112,8 @@ button:disabled {
 }
 
 .top-nav a,
-.top-nav span {
+.top-nav span,
+.top-nav button {
   display: inline-flex;
   align-items: center;
   min-height: 38px;
@@ -260,14 +261,14 @@ button:disabled {
   gap: 1rem;
 }
 
+.panel-title-row.compact {
+  align-items: center;
+}
+
 .review-header-actions {
   display: flex;
   align-items: center;
   gap: 0.55rem;
-}
-
-.panel-title-row.compact {
-  align-items: center;
 }
 
 .soft-pill {
@@ -322,6 +323,19 @@ button:disabled {
   background: linear-gradient(135deg, #eef6ff, #dcebff);
 }
 
+.top-nav button {
+  cursor: pointer;
+  outline: none;
+  font-family: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.top-nav button:hover {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
 .btn-dark {
   color: #fff;
   background: #102033;
@@ -361,7 +375,9 @@ button:disabled {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .table-list {
@@ -512,7 +528,7 @@ button:disabled {
   letter-spacing: -0.04em;
 }
 
-.schema-table-header > span {
+.schema-table-header>span {
   flex: 0 0 auto;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
@@ -572,9 +588,20 @@ button:disabled {
   font-weight: 900;
 }
 
-.badge.pk { color: #92400e; background: #fef3c7; }
-.badge.fk { color: #0f58be; background: #dcebff; }
-.badge.uq { color: #047857; background: #dcfce7; }
+.badge.pk {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.badge.fk {
+  color: #0f58be;
+  background: #dcebff;
+}
+
+.badge.uq {
+  color: #047857;
+  background: #dcfce7;
+}
 
 .empty-columns,
 .empty-list,
@@ -702,7 +729,7 @@ button:disabled {
   margin: 1rem 0;
 }
 
-.review-summary-grid > div {
+.review-summary-grid>div {
   display: grid;
   gap: 0.15rem;
   border: 1px solid var(--line);
@@ -724,9 +751,20 @@ button:disabled {
   text-transform: uppercase;
 }
 
-.review-summary-grid .high { color: #be123c; background: var(--red-soft); }
-.review-summary-grid .medium { color: var(--amber); background: var(--amber-soft); }
-.review-summary-grid .low { color: var(--green); background: var(--green-soft); }
+.review-summary-grid .high {
+  color: #be123c;
+  background: var(--red-soft);
+}
+
+.review-summary-grid .medium {
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+
+.review-summary-grid .low {
+  color: var(--green);
+  background: var(--green-soft);
+}
 
 .review-issues {
   display: grid;
@@ -741,23 +779,34 @@ button:disabled {
   background: #f8fbff;
 }
 
-.issue-card.high { border-color: #fecdd3; background: var(--red-soft); }
-.issue-card.medium { border-color: #fde68a; background: var(--amber-soft); }
-.issue-card.low { border-color: #bbf7d0; background: var(--green-soft); }
+.issue-card.high {
+  border-color: #fecdd3;
+  background: var(--red-soft);
+}
 
-.issue-card-header {
+.issue-card.medium {
+  border-color: #fde68a;
+  background: var(--amber-soft);
+}
+
+.issue-card.low {
+  border-color: #bbf7d0;
+  background: var(--green-soft);
+}
+
+.issue-card div {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
 }
 
-.issue-card-header > div {
-  display: flex;
-  align-items: center;
+.issue-card-header {
+  justify-content: space-between;
+}
+
+.issue-card-header>div {
   min-width: 0;
-  gap: 0.5rem;
 }
 
 .issue-card span {
@@ -789,16 +838,16 @@ button:disabled {
   flex: 0 0 auto;
   min-height: 36px;
   border-radius: 12px;
-  padding: 0.45rem 0.7rem;
-  font-size: 0.82rem;
+  padding: 0.45rem 0.75rem;
 }
 
 .issue-fix-note {
   display: block;
   margin-top: 0.55rem;
   color: #0f58be;
+  font-size: 0.8rem;
   font-style: normal;
-  font-weight: 900;
+  font-weight: 800;
 }
 
 .toast-message {
@@ -827,15 +876,12 @@ button:disabled {
 }
 
 @media (max-width: 860px) {
+
   .top-shell,
   .canvas-toolbar,
   .review-header {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .review-header-actions {
-    justify-content: space-between;
   }
 
   .designer-shell {

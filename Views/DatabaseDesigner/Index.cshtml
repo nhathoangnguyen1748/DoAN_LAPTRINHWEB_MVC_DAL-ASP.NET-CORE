@@ -445,6 +445,267 @@
         render();
     }
 
+    function stripSqlComments(sql) {
+        return String(sql || '')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/(--|#).*?$/gm, '');
+    }
+
+    function findMatchingParenthesis(text, openIndex) {
+        let depth = 0;
+        let quote = null;
+        let inBracket = false;
+        for (let index = openIndex; index < text.length; index++) {
+            const character = text[index];
+            if (inBracket) {
+                if (character === ']') inBracket = false;
+                continue;
+            }
+            if (quote) {
+                if (character === quote) quote = null;
+                continue;
+            }
+            if (character === '[') {
+                inBracket = true;
+                continue;
+            }
+            if (character === '\'' || character === '"' || character === '`') {
+                quote = character;
+                continue;
+            }
+            if (character === '(') depth++;
+            if (character === ')') {
+                depth--;
+                if (depth === 0) return index;
+            }
+        }
+        return -1;
+    }
+
+    function splitTopLevel(text, separator) {
+        const parts = [];
+        let value = '';
+        let depth = 0;
+        let quote = null;
+        let inBracket = false;
+        for (const character of text) {
+            if (inBracket) {
+                value += character;
+                if (character === ']') inBracket = false;
+                continue;
+            }
+            if (quote) {
+                value += character;
+                if (character === quote) quote = null;
+                continue;
+            }
+            if (character === '[') {
+                inBracket = true;
+                value += character;
+                continue;
+            }
+            if (character === '\'' || character === '"' || character === '`') {
+                quote = character;
+                value += character;
+                continue;
+            }
+            if (character === '(') depth++;
+            if (character === ')' && depth > 0) depth--;
+            if (character === separator && depth === 0) {
+                parts.push(value);
+                value = '';
+            } else {
+                value += character;
+            }
+        }
+        if (value.trim()) parts.push(value);
+        return parts;
+    }
+
+    function normalizeSqlIdentifier(identifier) {
+        let value = String(identifier || '').trim().replace(/;$/, '').trim();
+        if ((value.startsWith('[') && value.endsWith(']')) ||
+            (value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith('`') && value.endsWith('`'))) {
+            value = value.slice(1, -1);
+        }
+        return value.trim();
+    }
+
+    function lastIdentifierPart(identifier) {
+        const parts = splitTopLevel(identifier, '.').map(normalizeSqlIdentifier).filter(Boolean);
+        return parts.at(-1) || normalizeSqlIdentifier(identifier);
+    }
+
+    function readIdentifierToken(text, startIndex = 0) {
+        let cursor = startIndex;
+        while (cursor < text.length && /\s/.test(text[cursor])) cursor++;
+        if (cursor >= text.length) return { token: '', end: cursor };
+        const first = text[cursor];
+        if (first === '[') {
+            const close = text.indexOf(']', cursor + 1);
+            if (close >= 0) return { token: text.slice(cursor, close + 1), end: close + 1 };
+        }
+        if (first === '"' || first === '`') {
+            const close = text.indexOf(first, cursor + 1);
+            if (close >= 0) return { token: text.slice(cursor, close + 1), end: close + 1 };
+        }
+        const start = cursor;
+        while (cursor < text.length && !/[\s(),;]/.test(text[cursor])) cursor++;
+        return { token: text.slice(start, cursor), end: cursor };
+    }
+
+    function readColumnsFromParentheses(text) {
+        const open = text.indexOf('(');
+        if (open < 0) return [];
+        const close = findMatchingParenthesis(text, open);
+        if (close <= open) return [];
+        return splitTopLevel(text.slice(open + 1, close), ',')
+            .map(column => lastIdentifierPart(column.trim()))
+            .filter(Boolean);
+    }
+
+    function stripConstraintName(definition) {
+        const trimmed = definition.trim();
+        if (!/^CONSTRAINT\b/i.test(trimmed)) return definition;
+        const name = readIdentifierToken(trimmed, 'CONSTRAINT'.length);
+        return trimmed.slice(name.end).trim();
+    }
+
+    function parseClientColumnDefinition(definition, order) {
+        const name = readIdentifierToken(definition, 0);
+        if (!name.token) return null;
+        const rest = definition.slice(name.end).trim();
+        const typeStopWords = new Set(['CONSTRAINT', 'PRIMARY', 'FOREIGN', 'REFERENCES', 'UNIQUE', 'NULL', 'NOT', 'DEFAULT', 'CHECK', 'COLLATE', 'GENERATED', 'IDENTITY', 'AUTO_INCREMENT', 'COMMENT', 'ON']);
+        const typeTokens = splitTopLevel(rest, ' ').map(token => token.trim()).filter(Boolean);
+        const sqlType = [];
+        for (const token of typeTokens) {
+            const keyword = token.toUpperCase();
+            if (typeStopWords.has(keyword) || (keyword === 'KEY' && sqlType.at(-1)?.toUpperCase() === 'PRIMARY')) break;
+            sqlType.push(token);
+        }
+        const references = rest.match(/\bREFERENCES\s+([a-zA-Z0-9_`"\[\]\.]+)(?:\s*\(([^)]+)\))?/i);
+        return {
+            id: uid(),
+            name: lastIdentifierPart(name.token),
+            sqlType: sqlType.join(' ').replace(/\s+/g, ' ') || 'nvarchar(255)',
+            isPrimaryKey: /\bPRIMARY\s+KEY\b/i.test(rest),
+            isNullable: !/\bNOT\s+NULL\b/i.test(rest) && !/\bPRIMARY\s+KEY\b/i.test(rest),
+            isUnique: /\bUNIQUE\b/i.test(rest),
+            foreignKeyTable: references ? lastIdentifierPart(references[1]) : '',
+            foreignKeyColumn: references?.[2] ? lastIdentifierPart(references[2]) : (references ? 'id' : ''),
+            order
+        };
+    }
+
+    function parseClientTableForeignKey(definition) {
+        const localColumns = readColumnsFromParentheses(definition);
+        const reference = definition.match(/\bREFERENCES\s+([a-zA-Z0-9_`"\[\]\.]+)([\s\S]*)/i);
+        if (!reference) return null;
+        const targetColumns = readColumnsFromParentheses(reference[2] || '');
+        return {
+            localColumns,
+            targetTable: lastIdentifierPart(reference[1]),
+            targetColumns: targetColumns.length ? targetColumns : ['id']
+        };
+    }
+
+    function parseSqlToTables(sqlText) {
+        const cleaned = stripSqlComments(sqlText);
+        const tables = [];
+        const createTableRegex = /\bCREATE\s+TABLE\b/gi;
+        let match;
+        while ((match = createTableRegex.exec(cleaned)) !== null) {
+            let cursor = match.index + match[0].length;
+            while (cursor < cleaned.length && /\s/.test(cleaned[cursor])) cursor++;
+            if (cleaned.slice(cursor).toUpperCase().startsWith('IF NOT EXISTS')) {
+                cursor += 'IF NOT EXISTS'.length;
+            }
+            const name = readIdentifierToken(cleaned, cursor);
+            cursor = name.end;
+            while (cursor < cleaned.length && /\s/.test(cleaned[cursor])) cursor++;
+            if (!name.token || cleaned[cursor] !== '(') continue;
+            const close = findMatchingParenthesis(cleaned, cursor);
+            if (close <= cursor) continue;
+
+            const table = {
+                id: uid(),
+                name: lastIdentifierPart(name.token),
+                lastValidName: lastIdentifierPart(name.token),
+                x: 0,
+                y: 0,
+                columns: []
+            };
+            const primaryKeys = [];
+            const foreignKeys = [];
+            const uniqueColumns = [];
+            let order = 0;
+
+            for (const rawDefinition of splitTopLevel(cleaned.slice(cursor + 1, close), ',')) {
+                const definition = stripConstraintName(rawDefinition).trim();
+                if (!definition) continue;
+                if (/^PRIMARY\b/i.test(definition)) {
+                    primaryKeys.push(...readColumnsFromParentheses(definition));
+                    continue;
+                }
+                if (/^FOREIGN\b/i.test(definition)) {
+                    const key = parseClientTableForeignKey(definition);
+                    if (key) foreignKeys.push(key);
+                    continue;
+                }
+                if (/^UNIQUE\b/i.test(definition)) {
+                    uniqueColumns.push(...readColumnsFromParentheses(definition));
+                    continue;
+                }
+                if (/^(CHECK|KEY)\b/i.test(definition)) continue;
+                const column = parseClientColumnDefinition(definition, order++);
+                if (column) table.columns.push(column);
+            }
+
+            for (const keyName of primaryKeys) {
+                const column = table.columns.find(candidate => candidate.name.toLowerCase() === keyName.toLowerCase());
+                if (column) {
+                    column.isPrimaryKey = true;
+                    column.isNullable = false;
+                }
+            }
+            for (const columnName of uniqueColumns) {
+                const column = table.columns.find(candidate => candidate.name.toLowerCase() === columnName.toLowerCase());
+                if (column) column.isUnique = true;
+            }
+            for (const key of foreignKeys) {
+                key.localColumns.forEach((columnName, index) => {
+                    const column = table.columns.find(candidate => candidate.name.toLowerCase() === columnName.toLowerCase());
+                    if (column) {
+                        column.foreignKeyTable = key.targetTable;
+                        column.foreignKeyColumn = key.targetColumns[index] || 'id';
+                    }
+                });
+            }
+            if (table.columns.length) tables.push(table);
+            createTableRegex.lastIndex = close + 1;
+        }
+        return tables;
+    }
+
+    function mergeImportedTables(tables) {
+        for (const table of tables) {
+            const baseName = table.name || 'table';
+            let uniqueName = baseName;
+            let suffix = 1;
+            while (state.schema.tables.some(existing => existing.name.toLowerCase() === uniqueName.toLowerCase())) {
+                uniqueName = `${baseName}_${suffix++}`;
+            }
+            table.name = uniqueName;
+            table.lastValidName = uniqueName;
+            state.schema.tables.push(table);
+        }
+        if (tables.length) {
+            state.selectedTableId = tables[0].id;
+            state.selectedColumnId = tables[0].columns[0]?.id || null;
+        }
+    }
+
     async function importSql() {
         const sql = elements.sqlInput.value.trim();
         if (!sql) {
@@ -466,7 +727,14 @@
             render();
             showToast(`Imported ${state.schema.tables.length} tables.`);
         } catch (error) {
-            showToast(error.message || 'Import failed.');
+            const parsedTables = parseSqlToTables(sql);
+            if (!parsedTables.length) {
+                showToast(error.message || 'Import failed.');
+            } else {
+                mergeImportedTables(parsedTables);
+                autoLayout();
+                showToast(`Imported ${parsedTables.length} tables with local SQL parser.`);
+            }
         } finally {
             elements.importSqlBtn.disabled = false;
         }

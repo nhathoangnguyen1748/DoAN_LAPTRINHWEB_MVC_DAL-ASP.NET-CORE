@@ -1,5 +1,4 @@
-## Ignore Visual Studio temporary files, build results, and
-## user-specific settings.
+## Ignore Visual Studio temporary files, build results, and user-specific settings.
 
 # Build results
 [Dd]ebug/
@@ -15,6 +14,8 @@ bld/
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
+bin/
+obj/
 
 # Visual Studio 2015/2017/2019/2022 cache/options directory
 .vs/
@@ -33,3 +34,16 @@ publish/
 # Rider
 .idea/
 *.sln.iml
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
