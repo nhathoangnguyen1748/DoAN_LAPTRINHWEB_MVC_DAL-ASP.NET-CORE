@@ -547,11 +547,39 @@ textarea:focus-visible {
 .zoom-pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 3px;
+  padding: 2px;
 }
 
-.zoom-pill em {
-  font-style: normal;
+.zoom-pill strong {
+  min-width: 38px;
+  color: var(--text-soft);
+  text-align: center;
+}
+
+.zoom-btn,
+.fit-view-btn {
+  display: inline-grid;
+  min-width: 24px;
+  min-height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 10px;
+  font-weight: 900;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.fit-view-btn {
+  padding: 0 8px;
+}
+
+.zoom-btn:hover,
+.fit-view-btn:hover {
+  color: var(--blue-deep);
+  background: var(--blue-soft);
 }
 
 .canvas-viewport {
@@ -575,7 +603,11 @@ textarea:focus-visible {
 .table-layer,
 .empty-canvas {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  width: 1800px;
+  height: 1200px;
+  transform-origin: 0 0;
 }
 
 .relation-svg {
