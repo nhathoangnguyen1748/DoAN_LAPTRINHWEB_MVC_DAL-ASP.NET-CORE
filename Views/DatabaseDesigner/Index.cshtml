@@ -147,6 +147,7 @@
         reviewBtn: document.getElementById('reviewBtn'),
         reviewBtnText: document.getElementById('reviewBtnText'),
         exportBtn: document.getElementById('exportBtn'),
+        topExportBtn: document.getElementById('topExportBtn'),
         sqlStats: document.getElementById('sqlStats'),
         tableCount: document.getElementById('tableCount'),
         relationCount: document.getElementById('relationCount'),
@@ -1081,6 +1082,9 @@
     elements.fixAllReviewBtn.addEventListener('click', () => applyReviewFix(null, true));
     elements.autoLayoutBtn.addEventListener('click', autoLayout);
     elements.exportBtn.addEventListener('click', exportProject);
+    if (elements.topExportBtn) {
+        elements.topExportBtn.addEventListener('click', exportProject);
+    }
     elements.closeReviewBtn.addEventListener('click', () => elements.reviewOverlay.hidden = true);
 
     normalizeSchema(state.schema);
