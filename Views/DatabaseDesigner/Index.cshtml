@@ -328,6 +328,47 @@
     }
 
     function render() {
+        const activeEl = document.activeElement;
+        let focusSelector = null;
+        let selectionStart = null;
+        let selectionEnd = null;
+
+        if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) {
+            if (activeEl.hasAttribute('data-edit-table-name')) {
+                focusSelector = '[data-edit-table-name]';
+            } else if (activeEl.hasAttribute('data-edit-column-name')) {
+                const columnId = activeEl.getAttribute('data-column-id');
+                focusSelector = `[data-edit-column-name][data-column-id="${columnId}"]`;
+            } else if (activeEl.hasAttribute('data-edit-column-type')) {
+                const columnId = activeEl.getAttribute('data-column-id');
+                focusSelector = `[data-edit-column-type][data-column-id="${columnId}"]`;
+            } else if (activeEl.hasAttribute('data-edit-pk')) {
+                const columnId = activeEl.getAttribute('data-column-id');
+                focusSelector = `[data-edit-pk][data-column-id="${columnId}"]`;
+            } else if (activeEl.hasAttribute('data-edit-nullable')) {
+                const columnId = activeEl.getAttribute('data-column-id');
+                focusSelector = `[data-edit-nullable][data-column-id="${columnId}"]`;
+            } else if (activeEl.hasAttribute('data-edit-unique')) {
+                const columnId = activeEl.getAttribute('data-column-id');
+                focusSelector = `[data-edit-unique][data-column-id="${columnId}"]`;
+            } else if (activeEl.hasAttribute('data-edit-fk-table')) {
+                focusSelector = '[data-edit-fk-table]';
+            } else if (activeEl.hasAttribute('data-edit-fk-column')) {
+                focusSelector = '[data-edit-fk-column]';
+            } else if (activeEl.id) {
+                focusSelector = `#${activeEl.id}`;
+            }
+
+            if (focusSelector) {
+                try {
+                    selectionStart = activeEl.selectionStart;
+                    selectionEnd = activeEl.selectionEnd;
+                } catch (e) {
+                    // ignore if not supported by input type
+                }
+            }
+        }
+
         state.schema.projectName = elements.projectName.value || 'GeneratedMvcApp';
         const table = selectedTable();
         const selectedRelations = table
@@ -352,6 +393,20 @@
         renderCanvasTables();
         renderRelations();
         renderInspector();
+
+        if (focusSelector) {
+            const newActiveEl = document.querySelector(focusSelector);
+            if (newActiveEl) {
+                newActiveEl.focus();
+                if (selectionStart !== null && selectionEnd !== null) {
+                    try {
+                        newActiveEl.setSelectionRange(selectionStart, selectionEnd);
+                    } catch (e) {
+                        // ignore if not supported
+                    }
+                }
+            }
+        }
     }
 
     function renderTableList() {
@@ -397,7 +452,6 @@
                         </div>
                         <ul class="table-column-preview">${previewColumns}</ul>
                         ${table.columns.length > 5 ? `<p class="more-line">+ ${table.columns.length - 5} more</p>` : ''}
-                        <button class="chip-button chip-blue table-api-btn" type="button" data-side-mode="properties">API Config</button>
                     ` : ''}
                 </article>
             `;
