@@ -1,0 +1,34 @@
+@model DoAnLapTrinhWeb.Models.Auth.LoginViewModel
+
+@{
+    ViewData["Title"] = "Sign in";
+    ViewData["BodyClass"] = "auth-page";
+}
+
+<section class="auth-shell">
+    <div class="auth-panel">
+        <p class="section-kicker">Database workspace</p>
+        <h1>Sign in with Google</h1>
+        <p class="auth-copy">Use your Google email to manage ER projects and collaborate with teammates.</p>
+
+        @if (!string.IsNullOrWhiteSpace(Model.Message))
+        {
+            <div class="auth-alert">@Model.Message</div>
+        }
+
+        <form asp-controller="Account" asp-action="Google" method="post">
+            <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+            <button class="btn btn-primary wide google-login-btn" type="submit" disabled="@(!Model.IsGoogleConfigured)">
+                Sign in with Google
+            </button>
+        </form>
+
+        @if (!Model.IsGoogleConfigured)
+        {
+            <p class="auth-note">
+                Add <strong>Authentication:Google:ClientId</strong> and
+                <strong>Authentication:Google:ClientSecret</strong> before using Google login.
+            </p>
+        }
+    </div>
+</section>

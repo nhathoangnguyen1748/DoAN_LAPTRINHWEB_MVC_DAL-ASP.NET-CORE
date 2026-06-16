@@ -1,12 +1,19 @@
+@model DoAnLapTrinhWeb.Models.Projects.DesignerWorkspaceViewModel
+@using System.Text.Json
+
 @{
     ViewData["Title"] = "Database Designer";
+    var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+    var initialSchemaJson = JsonSerializer.Serialize(Model.Schema, jsonOptions);
+    var currentProjectIdJson = JsonSerializer.Serialize(Model.CurrentProjectId, jsonOptions);
+    var currentUserEmailJson = JsonSerializer.Serialize(Model.UserEmail, jsonOptions);
 }
 
 <section class="designer-shell">
     <aside class="control-panel">
         <div class="control-header">
             <p class="side-kicker">Control panel</p>
-            <button class="chip-button chip-blue" type="button" data-add-table>+ New</button>
+            <a class="chip-button exit-project-btn" asp-controller="Projects" asp-action="Index" aria-label="Back to project management"><-</a>
         </div>
 
         <div class="side-switch" role="tablist" aria-label="Designer panels">
@@ -100,6 +107,7 @@
                         </defs>
                     </svg>
                     <div id="tableLayer" class="table-layer"></div>
+                    <div id="remoteCursorLayer" class="remote-cursor-layer"></div>
                     <div id="emptyCanvas" class="empty-canvas">
                         <div class="empty-icon">+</div>
                         <h3>No tables yet</h3>
@@ -110,7 +118,7 @@
 
             <div class="canvas-footer">
                 <span>Project: <strong id="footerProjectName">GeneratedMvcApp</strong></span>
-                <span>Tip: Ctrl + mouse wheel to zoom, drag table header to move. FK lines may cross, but lanes do not share the same track.</span>
+                <span id="canvasTipText">Tip: Ctrl + mouse wheel to zoom, drag table header to move.</span>
                 <span>Selected: <strong id="footerSelectedTable">none</strong></span>
             </div>
         </div>
@@ -176,8 +184,12 @@
 </div>
 
 @section Scripts {
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
 (() => {
+    const initialSchema = @Html.Raw(initialSchemaJson);
+    const currentProjectId = @Html.Raw(currentProjectIdJson);
+    const currentUserEmail = @Html.Raw(currentUserEmailJson);
     const canvasSize = { width: 1800, height: 1200 };
     const tableWidth = 214;
     const headerHeight = 50;
@@ -195,7 +207,9 @@
         sideMode: 'tables',
         propertyTab: 'columns',
         tableSearch: '',
-        zoom: 0.48
+        zoom: 0.48,
+        projectId: currentProjectId,
+        applyingRemoteUpdate: false
     };
 
     const elements = {
@@ -210,6 +224,7 @@
         autoLayoutBtn: document.getElementById('autoLayoutBtn'),
         reviewBtn: document.getElementById('reviewBtn'),
         reviewBtnText: document.getElementById('reviewBtnText'),
+        canvasTipText: document.getElementById('canvasTipText'),
         exportBtn: document.getElementById('exportBtn'),
         topExportBtn: document.getElementById('topExportBtn'),
         sqlStats: document.getElementById('sqlStats'),
@@ -229,6 +244,7 @@
         canvas: document.getElementById('canvas'),
         tableLayer: document.getElementById('tableLayer'),
         relationSvg: document.getElementById('relationSvg'),
+        remoteCursorLayer: document.getElementById('remoteCursorLayer'),
         emptyCanvas: document.getElementById('emptyCanvas'),
         zoomOutBtn: document.getElementById('zoomOutBtn'),
         zoomInBtn: document.getElementById('zoomInBtn'),
@@ -252,11 +268,30 @@
         importCancelBtn: document.getElementById('importCancelBtn')
     };
 
+    const collaboration = {
+        connection: null,
+        schemaTimer: null,
+        cursorTimer: null,
+        cursorColor: colorFromEmail(currentUserEmail),
+        remoteCursors: new Map()
+    };
+
     function uid() {
         if (window.crypto && crypto.randomUUID) {
             return crypto.randomUUID().replaceAll('-', '');
         }
         return Math.random().toString(16).slice(2) + Date.now().toString(16);
+    }
+
+    function colorFromEmail(email) {
+        const palette = ['#1485f5', '#047857', '#b45309', '#be123c', '#7c3aed', '#0f766e', '#db2777'];
+        const source = String(email || 'guest');
+        let hash = 0;
+        for (let index = 0; index < source.length; index++) {
+            hash = ((hash << 5) - hash) + source.charCodeAt(index);
+            hash |= 0;
+        }
+        return palette[Math.abs(hash) % palette.length];
     }
 
     function escapeHtml(value) {
@@ -340,6 +375,119 @@
         elements.toast.hidden = false;
         clearTimeout(showToast.timer);
         showToast.timer = setTimeout(() => elements.toast.hidden = true, 3200);
+    }
+
+    function collaborationReady() {
+        return Boolean(state.projectId && collaboration.connection && collaboration.connection.state === signalR.HubConnectionState.Connected);
+    }
+
+    function scheduleSchemaBroadcast(delay = 320) {
+        if (state.applyingRemoteUpdate || !state.projectId || !collaboration.connection) return;
+        clearTimeout(collaboration.schemaTimer);
+        collaboration.schemaTimer = setTimeout(broadcastSchema, delay);
+    }
+
+    async function broadcastSchema() {
+        if (state.applyingRemoteUpdate || !collaborationReady()) return;
+        try {
+            await collaboration.connection.invoke('BroadcastSchema', state.projectId, state.schema);
+            elements.canvasTipText.textContent = 'Realtime synced.';
+        } catch (error) {
+            elements.canvasTipText.textContent = 'Realtime sync paused.';
+        }
+    }
+
+    function applyRemoteSchema(schema, email) {
+        state.applyingRemoteUpdate = true;
+        normalizeSchema(schema || { projectName: 'GeneratedMvcApp', tables: [] });
+        render();
+        state.applyingRemoteUpdate = false;
+        elements.canvasTipText.textContent = `Updated by ${email || 'teammate'}.`;
+    }
+
+    function updateRemoteCursor(cursor) {
+        if (!cursor?.email || cursor.email === currentUserEmail) return;
+        let cursorEl = collaboration.remoteCursors.get(cursor.email);
+        if (!cursorEl) {
+            cursorEl = document.createElement('div');
+            cursorEl.className = 'remote-cursor';
+            cursorEl.innerHTML = '<span class="remote-cursor-pointer"></span><strong></strong>';
+            elements.remoteCursorLayer.appendChild(cursorEl);
+            collaboration.remoteCursors.set(cursor.email, cursorEl);
+        }
+
+        cursorEl.style.transform = `translate(${Number(cursor.x) || 0}px, ${Number(cursor.y) || 0}px)`;
+        cursorEl.style.setProperty('--cursor-color', cursor.color || colorFromEmail(cursor.email));
+        cursorEl.querySelector('strong').textContent = cursor.email;
+        clearTimeout(cursorEl.hideTimer);
+        cursorEl.hidden = false;
+        cursorEl.hideTimer = setTimeout(() => {
+            cursorEl.hidden = true;
+        }, 5000);
+    }
+
+    function removeRemoteCursor(email) {
+        const cursorEl = collaboration.remoteCursors.get(email);
+        if (!cursorEl) return;
+        cursorEl.remove();
+        collaboration.remoteCursors.delete(email);
+    }
+
+    async function startCollaboration() {
+        if (!state.projectId) {
+            elements.canvasTipText.textContent = 'Create or open a project to enable realtime collaboration.';
+            return;
+        }
+
+        if (!window.signalR) {
+            elements.canvasTipText.textContent = 'Realtime script did not load.';
+            return;
+        }
+
+        collaboration.connection = new signalR.HubConnectionBuilder()
+            .withUrl('/hubs/project-collaboration')
+            .withAutomaticReconnect()
+            .build();
+
+        collaboration.connection.on('SchemaUpdated', applyRemoteSchema);
+        collaboration.connection.on('CursorMoved', updateRemoteCursor);
+        collaboration.connection.on('UserLeft', removeRemoteCursor);
+        collaboration.connection.on('UserJoined', email => {
+            elements.canvasTipText.textContent = `${email} joined this project.`;
+        });
+        collaboration.connection.onreconnected(async () => {
+            try {
+                await collaboration.connection.invoke('JoinProject', state.projectId);
+                elements.canvasTipText.textContent = 'Realtime collaboration reconnected.';
+            } catch {
+                elements.canvasTipText.textContent = 'Could not rejoin realtime project.';
+            }
+        });
+
+        try {
+            await collaboration.connection.start();
+            await collaboration.connection.invoke('JoinProject', state.projectId);
+            elements.canvasTipText.textContent = 'Realtime collaboration is on.';
+        } catch {
+            elements.canvasTipText.textContent = 'Realtime collaboration is unavailable.';
+        }
+    }
+
+    function broadcastCursor(event) {
+        if (!collaborationReady()) return;
+        const viewport = elements.canvasViewport;
+        const rect = viewport.getBoundingClientRect();
+        const x = (viewport.scrollLeft + event.clientX - rect.left) / state.zoom;
+        const y = (viewport.scrollTop + event.clientY - rect.top) / state.zoom;
+        if (collaboration.cursorTimer) return;
+        collaboration.cursorTimer = setTimeout(async () => {
+            collaboration.cursorTimer = null;
+            try {
+                await collaboration.connection.invoke('MoveCursor', state.projectId, x, y, collaboration.cursorColor);
+            } catch {
+                // Cursor updates are best-effort only.
+            }
+        }, 45);
     }
 
     function clampZoom(value) {
@@ -585,6 +733,7 @@
         state.selectedTableId = state.schema.tables[0]?.id || null;
         state.selectedColumnId = state.schema.tables[0]?.columns[0]?.id || null;
         render();
+        scheduleSchemaBroadcast();
     }
 
     function deleteAllTables() {
@@ -595,6 +744,7 @@
         state.selectedColumnId = null;
         state.lastReviewResult = null;
         render();
+        scheduleSchemaBroadcast();
         showToast('Deleted all tables from the diagram.');
     }
 
@@ -836,6 +986,7 @@
             table.y = 55 + Math.floor(index / 3) * 220;
         });
         render();
+        scheduleSchemaBroadcast();
     }
 
     function inboundCount(table) {
@@ -856,6 +1007,7 @@
         state.selectedTableId = table.id;
         state.selectedColumnId = table.columns[0].id;
         render();
+        scheduleSchemaBroadcast();
     }
 
     function addColumn(table) {
@@ -873,6 +1025,7 @@
         table.columns.push(column);
         state.selectedColumnId = column.id;
         render();
+        scheduleSchemaBroadcast();
     }
 
     function stripSqlComments(sql) {
@@ -1288,6 +1441,7 @@
             const result = await response.json();
             normalizeSchema(result.schema || state.schema);
             render();
+            scheduleSchemaBroadcast();
             state.fixingReview = false;
             showReview(result.review || { issues: [] });
             showToast(result.message || 'Automatic fix applied.');
@@ -1364,6 +1518,7 @@
             column.foreignKeyTable = '';
             column.foreignKeyColumn = '';
             render();
+            scheduleSchemaBroadcast();
             return;
         }
 
@@ -1404,6 +1559,7 @@
             table.columns = table.columns.filter(candidate => candidate.id !== column.id);
             state.selectedColumnId = table.columns[0]?.id || null;
             render();
+            scheduleSchemaBroadcast();
         }
     });
 
@@ -1424,6 +1580,7 @@
                 table.lastValidName = newName;
             }
             render();
+            scheduleSchemaBroadcast();
         }
 
         if (event.target === elements.tableSearchInput) {
@@ -1436,6 +1593,7 @@
             if (!column) return;
             column.name = event.target.value;
             render();
+            scheduleSchemaBroadcast();
         }
 
         if (event.target.matches('[data-edit-column-type]')) {
@@ -1443,6 +1601,7 @@
             if (!column) return;
             column.sqlType = event.target.value;
             render();
+            scheduleSchemaBroadcast();
         }
     });
 
@@ -1454,16 +1613,19 @@
             column.isPrimaryKey = event.target.checked;
             if (column.isPrimaryKey) column.isNullable = false;
             render();
+            scheduleSchemaBroadcast();
         }
 
         if (event.target.matches('[data-edit-nullable]')) {
             column.isNullable = event.target.checked;
             render();
+            scheduleSchemaBroadcast();
         }
 
         if (event.target.matches('[data-edit-unique]')) {
             column.isUnique = event.target.checked;
             render();
+            scheduleSchemaBroadcast();
         }
 
         if (event.target.matches('[data-edit-fk-table]')) {
@@ -1471,11 +1633,13 @@
             const targetTable = state.schema.tables.find(table => table.name === column.foreignKeyTable);
             column.foreignKeyColumn = targetTable?.columns.find(col => col.isPrimaryKey)?.name || targetTable?.columns[0]?.name || '';
             render();
+            scheduleSchemaBroadcast();
         }
 
         if (event.target.matches('[data-edit-fk-column]')) {
             column.foreignKeyColumn = event.target.value;
             render();
+            scheduleSchemaBroadcast();
         }
     });
 
@@ -1503,9 +1667,13 @@
         drag.table.y = Math.max(24, Math.min(canvasSize.height - 180, drag.originY + (event.clientY - drag.startY) / state.zoom));
         renderCanvasTables();
         renderRelations();
+        scheduleSchemaBroadcast(90);
     });
 
     document.addEventListener('pointerup', () => {
+        if (state.dragging) {
+            scheduleSchemaBroadcast(0);
+        }
         state.dragging = null;
     });
 
@@ -1536,9 +1704,11 @@
         event.preventDefault();
         setZoom(state.zoom + (event.deltaY < 0 ? zoomStep : -zoomStep), { x: event.clientX, y: event.clientY });
     }, { passive: false });
+    elements.canvasViewport.addEventListener('mousemove', broadcastCursor);
 
-    normalizeSchema(state.schema);
+    normalizeSchema(initialSchema);
     render();
+    startCollaboration();
 })();
 </script>
 }
