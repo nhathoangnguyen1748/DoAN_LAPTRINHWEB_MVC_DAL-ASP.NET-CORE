@@ -1,14 +1,39 @@
-# Build output
+## Ignore Visual Studio temporary files, build results, and user-specific settings.
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Re]leases/
+x64/
+x86/
+[Aa]rm/
+[Aa]rm64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
 bin/
 obj/
 
-# Visual Studio
+# Visual Studio 2015/2017/2019/2022 cache/options directory
 .vs/
-*.user
+
+# User-specific files
+*.rsuser
 *.suo
+*.user
+*.userprev
+*.userosscache
+*.sln.docstates
+
+# dotnet publish output
+publish/
 
 # Rider
 .idea/
+*.sln.iml
 
 # OS/editor files
 .DS_Store
@@ -21,3 +46,4 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
