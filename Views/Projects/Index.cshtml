@@ -1,0 +1,155 @@
+@model DoAnLapTrinhWeb.Models.Projects.ProjectsIndexViewModel
+
+@{
+    ViewData["Title"] = "Projects";
+    ViewData["BodyClass"] = "projects-page";
+    var ownedCount = Model.Projects.Count(project => project.IsOwner);
+    var sharedCount = Model.Projects.Count - ownedCount;
+    var totalTables = Model.Projects.Sum(project => project.TableCount);
+}
+
+<section class="projects-shell">
+    <header class="projects-header">
+        <div class="projects-title">
+            <p class="section-kicker">Workspace</p>
+            <h1>Project manager</h1>
+            <p>@Model.UserEmail</p>
+        </div>
+        <div class="projects-header-actions">
+            <form asp-controller="Account" asp-action="Logout" method="post">
+                <button class="btn btn-light" type="submit">Logout</button>
+            </form>
+        </div>
+    </header>
+
+    <section class="project-overview">
+        <div class="project-stat">
+            <span>Total projects</span>
+            <strong>@Model.Projects.Count</strong>
+        </div>
+        <div class="project-stat">
+            <span>Owned</span>
+            <strong>@ownedCount</strong>
+        </div>
+        <div class="project-stat">
+            <span>Shared</span>
+            <strong>@sharedCount</strong>
+        </div>
+        <div class="project-stat">
+            <span>Tables</span>
+            <strong>@totalTables</strong>
+        </div>
+    </section>
+
+    <section class="project-create-panel">
+        <div>
+            <p class="section-kicker">New project</p>
+            <h2>Create a database workspace</h2>
+        </div>
+        <form asp-controller="Projects" asp-action="Create" method="post" class="project-create-form">
+            <label>
+                <span>Project name</span>
+                <input class="text-input" name="name" placeholder="VD: WebBanHang ERD" required />
+            </label>
+            <button class="btn btn-primary" type="submit">Create project</button>
+        </form>
+    </section>
+
+    @if (Model.Projects.Count == 0)
+    {
+        <section class="empty-projects">
+            <div>
+                <p class="section-kicker">Empty workspace</p>
+                <h2>No projects yet</h2>
+                <p>Create your first ER project, then invite teammates by Google email.</p>
+            </div>
+        </section>
+    }
+    else
+    {
+        <section class="project-list-header">
+            <div>
+                <p class="section-kicker">Project list</p>
+                <h2>Recent workspaces</h2>
+            </div>
+        </section>
+
+        <div class="project-grid">
+            @foreach (var project in Model.Projects)
+            {
+                <article class="project-card">
+                    <div class="project-card-top">
+                        <div class="project-name-block">
+                            <span class="project-state @(project.IsOwner ? "owner" : "shared")">@(project.IsOwner ? "Owner" : "Shared")</span>
+                            <h2>@project.Name</h2>
+                            <p>@(project.IsOwner ? "You manage this project" : $"Shared by {project.OwnerEmail}")</p>
+                        </div>
+                        <div class="project-table-count">
+                            <strong>@project.TableCount</strong>
+                            <span>tables</span>
+                        </div>
+                    </div>
+
+                    <div class="project-meta">
+                        <span>Updated @project.UpdatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm")</span>
+                        <span>@project.CollaboratorEmails.Count Gmail collaborator(s)</span>
+                    </div>
+
+                    <div class="project-actions">
+                        <a class="btn btn-primary" asp-controller="DatabaseDesigner" asp-action="Index" asp-route-projectId="@project.Id">Open designer</a>
+                        @if (project.IsOwner)
+                        {
+                            <form asp-controller="Projects" asp-action="Delete" method="post" onsubmit="return confirm('Delete this project?');">
+                                <input type="hidden" name="id" value="@project.Id" />
+                                <button class="btn btn-danger" type="submit">Delete</button>
+                            </form>
+                        }
+                    </div>
+
+                    @if (project.IsOwner)
+                    {
+                        <div class="collab-panel">
+                            <div class="collab-panel-heading">
+                                <strong>Collaborators</strong>
+                                <span>@project.CollaboratorEmails.Count</span>
+                            </div>
+                            <form asp-controller="Projects" asp-action="AddCollaborator" method="post" class="collab-form">
+                                <input type="hidden" name="id" value="@project.Id" />
+                                <input class="text-input" name="email" type="email" placeholder="teammate@gmail.com" required />
+                                <button class="btn btn-light" type="submit">Add Gmail</button>
+                            </form>
+
+                            @if (project.CollaboratorEmails.Count > 0)
+                            {
+                                <div class="collaborator-list">
+                                    @foreach (var email in project.CollaboratorEmails)
+                                    {
+                                        <form asp-controller="Projects" asp-action="RemoveCollaborator" method="post" class="collaborator-chip">
+                                            <input type="hidden" name="id" value="@project.Id" />
+                                            <input type="hidden" name="email" value="@email" />
+                                            <span>@email</span>
+                                            <button type="submit" aria-label="Remove @email">x</button>
+                                        </form>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="collab-empty">No one else has access yet.</p>
+                            }
+                        </div>
+                    }
+                    else if (project.CollaboratorEmails.Count > 0)
+                    {
+                        <div class="collaborator-list read-only">
+                            @foreach (var email in project.CollaboratorEmails)
+                            {
+                                <span>@email</span>
+                            }
+                        </div>
+                    }
+                </article>
+            }
+        </div>
+    }
+</section>
