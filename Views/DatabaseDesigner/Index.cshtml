@@ -808,6 +808,7 @@
         const paths = [];
         const labels = [];
         const relations = relationColumns();
+        const activeTable = selectedTable();
 
         relations.forEach((relation, index) => {
             const targetTable = state.schema.tables.find(table => table.name.toLowerCase() === relation.column.foreignKeyTable.toLowerCase());
@@ -820,13 +821,21 @@
             const leftToRight = relation.table.x <= targetTable.x;
             const start = columnAnchor(relation.table, relation.column, leftToRight ? 'right' : 'left');
             const end = columnAnchor(targetTable, targetColumn, leftToRight ? 'left' : 'right');
+            
+            // Sử dụng các đoạn thẳng vuông góc (Orthogonal) kết hợp offset chống đè
             const offset = 26 + (index % 5) * 18;
             const midX = leftToRight ? Math.max(start.x + offset, (start.x + end.x) / 2) : Math.min(start.x - offset, (start.x + end.x) / 2);
             const d = `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
 
-            paths.push(`<path class="relation-path" d="${d}" marker-end="url(#arrowHead)"></path>`);
-            labels.push(`<text class="relation-label" x="${end.x + (leftToRight ? -44 : 14)}" y="${end.y - 8}">1</text>`);
-            labels.push(`<text class="relation-label many" x="${start.x + (leftToRight ? 12 : -46)}" y="${start.y - 8}">1..*</text>`);
+            let statusClass = '';
+            if (activeTable) {
+                const isRelated = relation.table.id === activeTable.id || targetTable.id === activeTable.id;
+                statusClass = isRelated ? 'active' : 'dimmed';
+            }
+
+            paths.push(`<path class="relation-path ${statusClass}" d="${d}" marker-end="url(#arrowHead)"></path>`);
+            labels.push(`<text class="relation-label ${statusClass}" x="${end.x + (leftToRight ? -44 : 14)}" y="${end.y - 8}">1</text>`);
+            labels.push(`<text class="relation-label many ${statusClass}" x="${start.x + (leftToRight ? 12 : -46)}" y="${start.y - 8}">1..*</text>`);
         });
 
         elements.relationSvg.innerHTML = defs + paths.join('') + labels.join('');
@@ -980,11 +989,85 @@
     }
 
     function autoLayout() {
-        const roots = [...state.schema.tables].sort((a, b) => inboundCount(a) - inboundCount(b));
-        roots.forEach((table, index) => {
-            table.x = 85 + (index % 3) * 330;
-            table.y = 55 + Math.floor(index / 3) * 220;
+        if (state.schema.tables.length === 0) return;
+
+        const tables = state.schema.tables;
+        const tableMap = new Map(tables.map(t => [t.name.toLowerCase(), t]));
+        
+        // Khởi tạo tầng mặc định cho mọi bảng
+        const layers = new Map();
+        tables.forEach(t => layers.set(t.id, 0));
+
+        // Dùng thuật toán DFS tính toán tầng phụ thuộc (depth of dependencies)
+        const visited = new Set();
+        const path = new Set();
+
+        function calculateLayer(table) {
+            if (path.has(table.id)) {
+                return layers.get(table.id); // Phát hiện chu kỳ, dùng giá trị hiện tại
+            }
+            if (visited.has(table.id)) {
+                return layers.get(table.id);
+            }
+
+            path.add(table.id);
+            let maxParentLayer = -1;
+
+            table.columns.forEach(col => {
+                if (col.foreignKeyTable) {
+                    const parentTable = tableMap.get(col.foreignKeyTable.toLowerCase());
+                    if (parentTable && parentTable.id !== table.id) {
+                        const parentLayer = calculateLayer(parentTable);
+                        maxParentLayer = Math.max(maxParentLayer, parentLayer);
+                    }
+                }
+            });
+
+            path.delete(table.id);
+            visited.add(table.id);
+
+            const computedLayer = maxParentLayer + 1;
+            layers.set(table.id, computedLayer);
+            return computedLayer;
+        }
+
+        tables.forEach(table => calculateLayer(table));
+
+        // Nhóm các bảng theo tầng
+        const layerGroups = new Map();
+        tables.forEach(table => {
+            const layer = layers.get(table.id) || 0;
+            if (!layerGroups.has(layer)) {
+                layerGroups.set(layer, []);
+            }
+            layerGroups.get(layer).push(table);
         });
+
+        // Bố trí tọa độ
+        const sortedLayerKeys = Array.from(layerGroups.keys()).sort((a, b) => a - b);
+        const startX = 85;
+        const startY = 55;
+        const colWidth = 360; // Khoảng cách cột đủ rộng cho đường nối Bezier
+        const rowGap = 40;    // Khoảng cách tối thiểu giữa các bảng cùng cột
+
+        sortedLayerKeys.forEach((layerKey, colIndex) => {
+            const group = layerGroups.get(layerKey) || [];
+            let currentY = startY;
+            const x = startX + colIndex * colWidth;
+
+            group.forEach(table => {
+                table.x = x;
+                table.y = currentY;
+                currentY += tableHeight(table) + rowGap;
+            });
+        });
+
+        // Giới hạn trong vùng canvasViewport
+        tables.forEach(table => {
+            table.x = Math.max(24, Math.min(canvasSize.width - tableWidth - 24, table.x));
+            table.y = Math.max(24, Math.min(canvasSize.height - tableHeight(table) - 24, table.y));
+        });
+
         render();
         scheduleSchemaBroadcast();
     }
@@ -1560,6 +1643,31 @@
             state.selectedColumnId = table.columns[0]?.id || null;
             render();
             scheduleSchemaBroadcast();
+            return;
+        }
+
+        // Bấm chọn bảng khi click vào bất kỳ vị trí nào trên bảng
+        const tableCard = event.target.closest('.schema-table');
+        if (tableCard) {
+            const tableId = tableCard.dataset.tableId;
+            if (state.selectedTableId !== tableId) {
+                state.selectedTableId = tableId;
+                const table = selectedTable();
+                if (table && (!state.selectedColumnId || !table.columns.some(c => c.id === state.selectedColumnId))) {
+                    state.selectedColumnId = table.columns[0]?.id || null;
+                }
+                render();
+            }
+            return;
+        }
+
+        // Bỏ chọn khi click vào khoảng trống của canvas
+        const isCanvasViewport = event.target.closest('#canvasViewport') || event.target.id === 'canvasViewport';
+        const isControlPanel = event.target.closest('.control-panel') || event.target.closest('.diagram-header') || event.target.closest('.review-overlay') || event.target.closest('.review-dialog');
+        if (isCanvasViewport && !isControlPanel) {
+            state.selectedTableId = null;
+            state.selectedColumnId = null;
+            render();
         }
     });
 
