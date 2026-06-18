@@ -14,17 +14,20 @@ public class DatabaseDesignerController : Controller
     private readonly SchemaReviewService _reviewService;
     private readonly AspNetMvcExportService _exportService;
     private readonly ProjectStore _projectStore;
+    private readonly MockDataService _mockDataService;
 
     public DatabaseDesignerController(
         SqlSchemaParser parser,
         SchemaReviewService reviewService,
         AspNetMvcExportService exportService,
-        ProjectStore projectStore)
+        ProjectStore projectStore,
+        MockDataService mockDataService)
     {
         _parser = parser;
         _reviewService = reviewService;
         _exportService = exportService;
         _projectStore = projectStore;
+        _mockDataService = mockDataService;
     }
 
     public async Task<IActionResult> Index(string? projectId, CancellationToken cancellationToken)
@@ -81,7 +84,7 @@ public class DatabaseDesignerController : Controller
     }
 
     [HttpPost]
-    public IActionResult Export([FromBody] DatabaseSchema schema)
+    public async Task<IActionResult> Export([FromBody] DatabaseSchema schema, CancellationToken cancellationToken)
     {
         if (schema.Tables.Count == 0)
         {
@@ -89,7 +92,14 @@ public class DatabaseDesignerController : Controller
         }
 
         var projectName = string.IsNullOrWhiteSpace(schema.ProjectName) ? "GeneratedMvcApp" : schema.ProjectName.Trim();
-        var zip = _exportService.CreateZip(schema);
+
+        string? seedSql = null;
+        if (schema.IncludeMockData)
+        {
+            seedSql = await _mockDataService.GenerateMockDataSqlAsync(schema, cancellationToken);
+        }
+
+        var zip = _exportService.CreateZip(schema, seedSql);
         return File(zip, "application/zip", $"{projectName}-aspnet-mvc-sqlserver.zip");
     }
 
