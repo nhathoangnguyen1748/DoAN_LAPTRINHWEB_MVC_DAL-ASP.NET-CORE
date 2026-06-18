@@ -36,6 +36,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddSingleton<SqlSchemaParser>();
 builder.Services.AddSingleton<SchemaReviewService>();
 builder.Services.AddSingleton<AspNetMvcExportService>();
+builder.Services.AddSingleton<MockDataService>();
 builder.Services.AddSingleton<ProjectStore>();
 
 var app = builder.Build();

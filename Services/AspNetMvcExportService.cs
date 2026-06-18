@@ -7,7 +7,7 @@ namespace DoAnLapTrinhWeb.Services;
 
 public sealed class AspNetMvcExportService
 {
-    public byte[] CreateZip(DatabaseSchema inputSchema)
+    public byte[] CreateZip(DatabaseSchema inputSchema, string? seedSql = null)
     {
         var schema = NormalizeSchema(inputSchema);
         var entities = BuildEntityInfos(schema);
@@ -24,8 +24,13 @@ public sealed class AspNetMvcExportService
             AddEntry(archive, $"{projectName}/docker-compose.yml", GenerateDockerCompose(projectName));
             AddEntry(archive, $"{projectName}/README.md", GenerateReadme(projectName, schema));
             AddEntry(archive, $"{projectName}/Data/AppDbContext.cs", GenerateDbContext(projectName, entities));
-            AddEntry(archive, $"{projectName}/Data/DatabaseBootstrapper.cs", GenerateDatabaseBootstrapper(projectName));
+            AddEntry(archive, $"{projectName}/Data/DatabaseBootstrapper.cs", GenerateDatabaseBootstrapper(projectName, !string.IsNullOrWhiteSpace(seedSql)));
             AddEntry(archive, $"{projectName}/Migrations/InitialCreate.sql", GenerateSqlScript(schema));
+
+            if (!string.IsNullOrWhiteSpace(seedSql))
+            {
+                AddEntry(archive, $"{projectName}/Migrations/SeedData.sql", seedSql);
+            }
             AddEntry(archive, $"{projectName}/Controllers/HomeController.cs", GenerateHomeController(projectName));
             AddEntry(archive, $"{projectName}/Views/_ViewImports.cshtml", $"@using {projectName}\n@using {projectName}.Models\n@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers\n");
             AddEntry(archive, $"{projectName}/Views/_ViewStart.cshtml", "@{\n    Layout = \"_Layout\";\n}\n");
@@ -411,8 +416,29 @@ volumes:
         }
     }
 
-    private static string GenerateDatabaseBootstrapper(string projectName)
+    private static string GenerateDatabaseBootstrapper(string projectName, bool hasSeedData = false)
     {
+        var seedBlock = !hasSeedData
+            ? string.Empty
+            : $$"""
+
+            // Chèn dữ liệu mẫu (Seed Data)
+            var seedPath = Path.Combine(AppContext.BaseDirectory, "Migrations", "SeedData.sql");
+            if (File.Exists(seedPath))
+            {
+                var seedSql = await File.ReadAllTextAsync(seedPath);
+                var batches = seedSql.Split(new[] { "\nGO\n", "\nGO\r\n", "\r\nGO\r\n", "\r\nGO\n" }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var batch in batches)
+                {
+                    var trimmed = batch.Trim();
+                    if (!string.IsNullOrWhiteSpace(trimmed))
+                    {
+                        await context.Database.ExecuteSqlRawAsync(trimmed);
+                    }
+                }
+            }
+""";
+
         return $$"""
 using Microsoft.EntityFrameworkCore;
 
@@ -430,6 +456,7 @@ public static class DatabaseBootstrapper
             try
             {
                 await context.Database.EnsureCreatedAsync();
+{{seedBlock}}
                 return;
             }
             catch when (attempt < 20)
