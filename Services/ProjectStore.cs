@@ -1,133 +1,123 @@
-using System.Net.Mail;
-using System.Text.Json;
+﻿using System.Net.Mail;
+using DoAnLapTrinhWeb.Data;
 using DoAnLapTrinhWeb.Models.Designer;
 using DoAnLapTrinhWeb.Models.Projects;
+using Microsoft.EntityFrameworkCore;
 
 namespace DoAnLapTrinhWeb.Services;
 
 public class ProjectStore
 {
-    private readonly string _filePath;
-    private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly JsonSerializerOptions _jsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true
-    };
+    private readonly AppDbContext _db;
 
-    public ProjectStore(IWebHostEnvironment environment)
+    public ProjectStore(AppDbContext db)
     {
-        _filePath = Path.Combine(environment.ContentRootPath, "App_Data", "designer-projects.json");
+        _db = db;
     }
 
     public async Task<IReadOnlyList<ProjectSummaryViewModel>> GetAccessibleProjectsAsync(string email, CancellationToken cancellationToken = default)
     {
         var normalizedEmail = NormalizeEmail(email);
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            var projects = await ReadProjectsUnsafeAsync(cancellationToken);
-            return projects
-                .Where(project => CanAccess(project, normalizedEmail))
-                .OrderByDescending(project => project.UpdatedAt)
-                .Select(project => ToSummary(project, normalizedEmail))
-                .ToList();
-        }
-        finally
-        {
-            _gate.Release();
-        }
+
+        var projects = await _db.Projects
+            .Where(p => p.OwnerEmail == normalizedEmail ||
+                        _db.ProjectCollaborators.Any(c => c.ProjectId == p.Id && c.Email == normalizedEmail))
+            .OrderByDescending(p => p.UpdatedAt)
+            .ToListAsync(cancellationToken);
+
+        var collaboratorMap = await _db.ProjectCollaborators
+            .Where(c => projects.Select(p => p.Id).Contains(c.ProjectId))
+            .GroupBy(c => c.ProjectId)
+            .ToDictionaryAsync(g => g.Key, g => g.Select(c => c.Email).ToList(), cancellationToken);
+
+        return projects.Select(p => ToSummary(p, normalizedEmail, collaboratorMap.GetValueOrDefault(p.Id) ?? new List<string>())).ToList();
     }
 
     public async Task<DesignerProject?> GetProjectAsync(string projectId, string email, CancellationToken cancellationToken = default)
     {
         var normalizedEmail = NormalizeEmail(email);
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            var projects = await ReadProjectsUnsafeAsync(cancellationToken);
-            return projects.FirstOrDefault(project => project.Id == projectId && CanAccess(project, normalizedEmail));
-        }
-        finally
-        {
-            _gate.Release();
-        }
+
+        var project = await _db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
+        if (project is null)
+            return null;
+
+        var collaborators = await _db.ProjectCollaborators
+            .Where(c => c.ProjectId == projectId)
+            .Select(c => c.Email)
+            .ToListAsync(cancellationToken);
+
+        project.CollaboratorEmails = collaborators;
+
+        if (!CanAccess(project, normalizedEmail))
+            return null;
+
+        return project;
     }
 
     public async Task<DesignerProject> CreateProjectAsync(string ownerEmail, string projectName, CancellationToken cancellationToken = default)
     {
         var normalizedOwner = NormalizeEmail(ownerEmail);
         var normalizedName = NormalizeName(projectName);
-        await _gate.WaitAsync(cancellationToken);
-        try
+
+        var project = new DesignerProject
         {
-            var projects = await ReadProjectsUnsafeAsync(cancellationToken);
-            var project = new DesignerProject
-            {
-                Name = normalizedName,
-                OwnerEmail = normalizedOwner,
-                Schema = new DatabaseSchema { ProjectName = normalizedName },
-                CreatedAt = DateTimeOffset.UtcNow,
-                UpdatedAt = DateTimeOffset.UtcNow
-            };
-            projects.Add(project);
-            await WriteProjectsUnsafeAsync(projects, cancellationToken);
-            return project;
-        }
-        finally
-        {
-            _gate.Release();
-        }
+            Name = normalizedName,
+            OwnerEmail = normalizedOwner,
+            Schema = new DatabaseSchema { ProjectName = normalizedName },
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+
+        _db.Projects.Add(project);
+        await _db.SaveChangesAsync(cancellationToken);
+        return project;
     }
 
     public async Task<bool> DeleteProjectAsync(string projectId, string ownerEmail, CancellationToken cancellationToken = default)
     {
         var normalizedOwner = NormalizeEmail(ownerEmail);
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            var projects = await ReadProjectsUnsafeAsync(cancellationToken);
-            var project = projects.FirstOrDefault(candidate => candidate.Id == projectId);
-            if (project is null || !IsOwner(project, normalizedOwner))
-            {
-                return false;
-            }
 
-            projects.Remove(project);
-            await WriteProjectsUnsafeAsync(projects, cancellationToken);
-            return true;
-        }
-        finally
-        {
-            _gate.Release();
-        }
+        var project = await _db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
+        if (project is null || !IsOwner(project, normalizedOwner))
+            return false;
+
+        var collaborators = await _db.ProjectCollaborators
+            .Where(c => c.ProjectId == projectId)
+            .ToListAsync(cancellationToken);
+
+        _db.ProjectCollaborators.RemoveRange(collaborators);
+        _db.Projects.Remove(project);
+        await _db.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<DesignerProject?> SaveSchemaAsync(string projectId, string email, DatabaseSchema schema, CancellationToken cancellationToken = default)
     {
         var normalizedEmail = NormalizeEmail(email);
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            var projects = await ReadProjectsUnsafeAsync(cancellationToken);
-            var project = projects.FirstOrDefault(candidate => candidate.Id == projectId);
-            if (project is null || !CanAccess(project, normalizedEmail))
-            {
-                return null;
-            }
 
-            var projectName = NormalizeName(schema.ProjectName);
-            schema.ProjectName = projectName;
-            schema.Tables ??= new List<SchemaTable>();
-            project.Name = projectName;
-            project.Schema = schema;
-            project.UpdatedAt = DateTimeOffset.UtcNow;
-            await WriteProjectsUnsafeAsync(projects, cancellationToken);
-            return project;
-        }
-        finally
-        {
-            _gate.Release();
-        }
+        var project = await _db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
+        if (project is null)
+            return null;
+
+        var collaborators = await _db.ProjectCollaborators
+            .Where(c => c.ProjectId == projectId)
+            .Select(c => c.Email)
+            .ToListAsync(cancellationToken);
+
+        project.CollaboratorEmails = collaborators;
+
+        if (!CanAccess(project, normalizedEmail))
+            return null;
+
+        var projectName = NormalizeName(schema.ProjectName);
+        schema.ProjectName = projectName;
+        schema.Tables ??= new List<SchemaTable>();
+        project.Name = projectName;
+        project.Schema = schema;
+        project.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return project;
     }
 
     public async Task<DesignerProject?> AddCollaboratorAsync(string projectId, string ownerEmail, string collaboratorEmail, CancellationToken cancellationToken = default)
@@ -135,94 +125,62 @@ public class ProjectStore
         var normalizedOwner = NormalizeEmail(ownerEmail);
         var normalizedCollaborator = NormalizeEmail(collaboratorEmail);
         if (!IsValidEmail(normalizedCollaborator))
-        {
             return null;
-        }
 
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            var projects = await ReadProjectsUnsafeAsync(cancellationToken);
-            var project = projects.FirstOrDefault(candidate => candidate.Id == projectId);
-            if (project is null || !IsOwner(project, normalizedOwner))
-            {
-                return null;
-            }
+        var project = await _db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
+        if (project is null || !IsOwner(project, normalizedOwner))
+            return null;
 
-            if (!string.Equals(project.OwnerEmail, normalizedCollaborator, StringComparison.OrdinalIgnoreCase) &&
-                !project.CollaboratorEmails.Contains(normalizedCollaborator, StringComparer.OrdinalIgnoreCase))
-            {
-                project.CollaboratorEmails.Add(normalizedCollaborator);
-                project.CollaboratorEmails.Sort(StringComparer.OrdinalIgnoreCase);
-                project.UpdatedAt = DateTimeOffset.UtcNow;
-                await WriteProjectsUnsafeAsync(projects, cancellationToken);
-            }
-
+        if (string.Equals(project.OwnerEmail, normalizedCollaborator, StringComparison.OrdinalIgnoreCase))
             return project;
-        }
-        finally
+
+        var exists = await _db.ProjectCollaborators
+            .AnyAsync(c => c.ProjectId == projectId && c.Email == normalizedCollaborator, cancellationToken);
+
+        if (!exists)
         {
-            _gate.Release();
+            _db.ProjectCollaborators.Add(new ProjectCollaborator
+            {
+                ProjectId = projectId,
+                Email = normalizedCollaborator
+            });
+            project.UpdatedAt = DateTimeOffset.UtcNow;
+            await _db.SaveChangesAsync(cancellationToken);
         }
+
+        return project;
     }
 
     public async Task<DesignerProject?> RemoveCollaboratorAsync(string projectId, string ownerEmail, string collaboratorEmail, CancellationToken cancellationToken = default)
     {
         var normalizedOwner = NormalizeEmail(ownerEmail);
         var normalizedCollaborator = NormalizeEmail(collaboratorEmail);
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            var projects = await ReadProjectsUnsafeAsync(cancellationToken);
-            var project = projects.FirstOrDefault(candidate => candidate.Id == projectId);
-            if (project is null || !IsOwner(project, normalizedOwner))
-            {
-                return null;
-            }
 
-            project.CollaboratorEmails.RemoveAll(email => string.Equals(email, normalizedCollaborator, StringComparison.OrdinalIgnoreCase));
+        var project = await _db.Projects.FirstOrDefaultAsync(p => p.Id == projectId, cancellationToken);
+        if (project is null || !IsOwner(project, normalizedOwner))
+            return null;
+
+        var collaborator = await _db.ProjectCollaborators
+            .FirstOrDefaultAsync(c => c.ProjectId == projectId && c.Email == normalizedCollaborator, cancellationToken);
+
+        if (collaborator is not null)
+        {
+            _db.ProjectCollaborators.Remove(collaborator);
             project.UpdatedAt = DateTimeOffset.UtcNow;
-            await WriteProjectsUnsafeAsync(projects, cancellationToken);
-            return project;
+            await _db.SaveChangesAsync(cancellationToken);
         }
-        finally
-        {
-            _gate.Release();
-        }
+
+        return project;
     }
 
-    private async Task<List<DesignerProject>> ReadProjectsUnsafeAsync(CancellationToken cancellationToken)
-    {
-        if (!File.Exists(_filePath))
-        {
-            return new List<DesignerProject>();
-        }
-
-        await using var stream = File.OpenRead(_filePath);
-        return await JsonSerializer.DeserializeAsync<List<DesignerProject>>(stream, _jsonOptions, cancellationToken)
-               ?? new List<DesignerProject>();
-    }
-
-    private async Task WriteProjectsUnsafeAsync(List<DesignerProject> projects, CancellationToken cancellationToken)
-    {
-        var directory = Path.GetDirectoryName(_filePath);
-        if (!string.IsNullOrWhiteSpace(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        await using var stream = File.Create(_filePath);
-        await JsonSerializer.SerializeAsync(stream, projects, _jsonOptions, cancellationToken);
-    }
-
-    private static ProjectSummaryViewModel ToSummary(DesignerProject project, string viewerEmail)
+    private static ProjectSummaryViewModel ToSummary(DesignerProject project, string viewerEmail, List<string> collaboratorEmails)
     {
         return new ProjectSummaryViewModel
         {
             Id = project.Id,
             Name = project.Name,
             OwnerEmail = project.OwnerEmail,
-            CollaboratorEmails = project.CollaboratorEmails.ToList(),
+            CollaboratorEmails = collaboratorEmails,
             CreatedAt = project.CreatedAt,
             UpdatedAt = project.UpdatedAt,
             TableCount = project.Schema.Tables.Count,
