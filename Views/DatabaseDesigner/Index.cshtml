@@ -1,4 +1,4 @@
-﻿@model DoAnLapTrinhWeb.Models.Projects.DesignerWorkspaceViewModel
+@model DoAnLapTrinhWeb.Models.Projects.DesignerWorkspaceViewModel
 @using System.Text.Json
 
 @{
@@ -183,44 +183,140 @@
     </div>
 </div>
 
-<div id="exportConfigOverlay" class="review-overlay" hidden>
-    <div class="review-dialog import-dialog">
+<style>
+    .export-dialog-custom { max-width: 480px; width: 100%; border-radius: 16px; font-family: inherit; display: flex; flex-direction: column; max-height: 90vh; }
+    .export-dialog-custom .import-dialog-header { background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 20px 24px; }
+    .export-dialog-custom .import-dialog-header h2 { margin: 0 0 4px; font-size: 1.25rem; color: #0f172a; font-weight: 700; }
+    .export-dialog-custom .import-dialog-header p { margin: 0; font-size: 0.9rem; color: #64748b; }
+    .export-body { padding: 24px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; flex: 1; min-height: 0; }
+    .export-field-group { display: flex; flex-direction: column; gap: 8px; }
+    .export-field-group label { font-size: 0.85rem; font-weight: 700; color: #334155; text-transform: uppercase; letter-spacing: 0.5px; }
+    .export-input { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; color: #0f172a; transition: all 0.2s; background: #fff; }
+    .export-input:focus { border-color: #3b82f6; outline: none; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
+    
+    .export-radio-group { display: flex; flex-direction: column; gap: 10px; }
+    .export-radio-card { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border: 1px solid #cbd5e1; border-radius: 10px; cursor: pointer; transition: all 0.2s; background: #fff; position: relative; }
+    .export-radio-card:hover { border-color: #94a3b8; background: #f8fafc; }
+    .export-radio-card input[type="radio"] { margin-top: 2px; width: 16px; height: 16px; cursor: pointer; }
+    .export-radio-info { display: flex; flex-direction: column; gap: 2px; }
+    .export-radio-title { font-weight: 700; color: #0f172a; font-size: 0.95rem; }
+    .export-radio-desc { font-size: 0.85rem; color: #64748b; }
+    .export-radio-card:has(input[type="radio"]:checked) { border-color: #3b82f6; background: #eff6ff; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.05); }
+    
+    .export-dynamic-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; animation: slideDown 0.2s ease-out forwards; }
+    .export-dynamic-box .export-field-group + .export-field-group { margin-top: 12px; }
+    .export-footer { padding: 16px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 12px; flex-shrink: 0; }
+    .export-btn { padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 0.95rem; cursor: pointer; transition: all 0.2s; border: none; display: flex; align-items: center; justify-content: center; }
+    .export-btn-primary { background: #3b82f6; color: white; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2); }
+    .export-btn-primary:hover { background: #2563eb; transform: translateY(-1px); box-shadow: 0 4px 6px rgba(59, 130, 246, 0.25); }
+    .export-btn-secondary { background: #fff; color: #475569; border: 1px solid #cbd5e1; }
+    .export-btn-secondary:hover { background: #f1f5f9; color: #0f172a; }
+    @@keyframes slideDown { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+    .export-mockdata-toggle { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; cursor: pointer; }
+    .export-mockdata-toggle:hover { border-color: #94a3b8; background: #f1f5f9; }
+    .export-mockdata-info { display: flex; flex-direction: column; gap: 2px; }
+    .export-mockdata-info strong { font-size: 0.95rem; color: #0f172a; }
+    .export-mockdata-info span { font-size: 0.82rem; color: #64748b; }
+    .export-toggle-switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
+    .export-toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .export-toggle-track { position: absolute; inset: 0; background: #cbd5e1; border-radius: 999px; transition: background 0.2s; cursor: pointer; }
+    .export-toggle-track::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: white; border-radius: 50%; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+    .export-toggle-switch input:checked + .export-toggle-track { background: #3b82f6; }
+    .export-toggle-switch input:checked + .export-toggle-track::before { transform: translateX(18px); }
+</style>
+
+<div id="exportConfigOverlay" class="review-overlay" hidden style="background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center;">
+    <div class="review-dialog export-dialog-custom" style="padding: 0; border: none; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); overflow: hidden;">
         <div class="import-dialog-header">
-            <p class="section-kicker">Export</p>
-            <h2>Export MVC Application</h2>
-            <p>Configure the database connection for your exported project.</p>
+            <h2>Export MVC Project</h2>
+            <p>Customize your project details and database connection before exporting the source code.</p>
         </div>
-        <div style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.5rem; text-align: left;">
-            <label style="display: flex; gap: 0.5rem; align-items: center; font-weight: bold; cursor: pointer;">
-                <input type="radio" name="exportMode" value="local" checked onchange="document.getElementById('localConfigFields').style.display='flex'; document.getElementById('liveConfigFields').style.display='none'; document.getElementById('preconfigInfo').style.display='none';" /> Chạy local
-            </label>
-            <div id="localConfigFields" style="margin-left: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
-                <input type="text" id="localServerName" placeholder="Server name (e.g. localhost)" class="field-input" />
+        
+        <div class="export-body">
+            <div class="export-field-group">
+                <label for="exportProjectName">Project Name</label>
+                <input type="text" id="exportProjectName" class="export-input" placeholder="e.g. MyAwesomeApp" />
             </div>
 
-            <label style="display: flex; gap: 0.5rem; align-items: center; font-weight: bold; cursor: pointer;">
-                <input type="radio" name="exportMode" value="live" onchange="document.getElementById('localConfigFields').style.display='none'; document.getElementById('liveConfigFields').style.display='flex'; document.getElementById('preconfigInfo').style.display='none';" /> Chạy live
-            </label>
-            <div id="liveConfigFields" style="margin-left: 1.5rem; display: none; flex-direction: column; gap: 0.5rem;">
-                <input type="text" id="liveServerName" placeholder="IP/Server name" class="field-input" />
-                <input type="text" id="liveLogin" placeholder="Login (e.g. sa)" class="field-input" />
-                <input type="password" id="livePassword" placeholder="Password" class="field-input" />
+            <div class="export-radio-group">
+                <label class="export-radio-card">
+                    <input type="radio" name="exportMode" value="local" checked onchange="document.getElementById('localConfigFields').style.display='block'; document.getElementById('liveConfigFields').style.display='none'; document.getElementById('preconfigInfo').style.display='none';" />
+                    <div class="export-radio-info">
+                        <span class="export-radio-title">Local Server</span>
+                        <span class="export-radio-desc">Export for local development (e.g., localhost\SQLEXPRESS).</span>
+                    </div>
+                </label>
+
+                <label class="export-radio-card">
+                    <input type="radio" name="exportMode" value="live" onchange="document.getElementById('localConfigFields').style.display='none'; document.getElementById('liveConfigFields').style.display='block'; document.getElementById('preconfigInfo').style.display='none';" />
+                    <div class="export-radio-info">
+                        <span class="export-radio-title">Live Server</span>
+                        <span class="export-radio-desc">Connect to a remote SQL Server with credentials.</span>
+                    </div>
+                </label>
+
+                <label class="export-radio-card">
+                    <input type="radio" name="exportMode" value="preconfig" onchange="document.getElementById('localConfigFields').style.display='none'; document.getElementById('liveConfigFields').style.display='none'; document.getElementById('preconfigInfo').style.display='block';" />
+                    <div class="export-radio-info">
+                        <span class="export-radio-title">Pre-configured Cloud</span>
+                        <span class="export-radio-desc">Use the default shared cloud database instantly.</span>
+                    </div>
+                </label>
             </div>
 
-            <label style="display: flex; gap: 0.5rem; align-items: center; font-weight: bold; cursor: pointer;">
-                <input type="radio" name="exportMode" value="preconfig" onchange="document.getElementById('localConfigFields').style.display='none'; document.getElementById('liveConfigFields').style.display='none'; document.getElementById('preconfigInfo').style.display='flex';" /> Chạy sẵn cấu hình
-            </label>
-            <div id="preconfigInfo" style="margin-left: 1.5rem; display: none; flex-direction: column; gap: 0.5rem;">
-                <p style="margin: 0; color: var(--muted); font-size: 0.95rem; line-height: 1.5;">
-                    <strong>Server:</strong> 103.72.56.55,2025<br/>
-                    <strong>Login:</strong> sa<br/>
-                    <strong>Password:</strong> !Pass123
-                </p>
+            <div id="localConfigFields" class="export-dynamic-box" style="display: block;">
+                <div class="export-field-group">
+                    <label for="localServerName">SQL Server Instance</label>
+                    <input type="text" id="localServerName" class="export-input" placeholder="e.g. localhost\SQLEXPRESS" />
+                </div>
             </div>
+
+            <div id="liveConfigFields" class="export-dynamic-box" style="display: none;">
+                <div class="export-field-group">
+                    <label for="liveServerName">Server Address / IP</label>
+                    <input type="text" id="liveServerName" class="export-input" placeholder="e.g. 103.72.56.55,1433" />
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+                    <div class="export-field-group">
+                        <label for="liveLogin">Username</label>
+                        <input type="text" id="liveLogin" class="export-input" placeholder="sa" />
+                    </div>
+                    <div class="export-field-group">
+                        <label for="livePassword">Password</label>
+                        <input type="password" id="livePassword" class="export-input" placeholder="••••••••" />
+                    </div>
+                </div>
+            </div>
+
+            <div id="preconfigInfo" class="export-dynamic-box" style="display: none;">
+                <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.95rem; color: #475569;">
+                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
+                        <span>Server Host:</span> <strong style="color: #0f172a;">103.72.56.55,2025</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
+                        <span>Login User:</span> <strong style="color: #0f172a;">sa</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>Password:</span> <strong style="color: #0f172a;">!Pass123</strong>
+                    </div>
+                </div>
+            </div>
+
+            <label class="export-mockdata-toggle">
+                <div class="export-mockdata-info">
+                    <strong>Include Mock Data</strong>
+                    <span>Seed the database with sample records when the app starts for the first time.</span>
+                </div>
+                <div class="export-toggle-switch">
+                    <input type="checkbox" id="exportIncludeMockData" />
+                    <div class="export-toggle-track"></div>
+                </div>
+            </label>
         </div>
-        <div class="import-choice-grid">
-            <button id="exportConfirmBtn" class="btn btn-primary" type="button">Export</button>
-            <button id="exportCancelBtn" class="btn btn-light no-offset" type="button">Cancel</button>
+        
+        <div class="export-footer">
+            <button id="exportCancelBtn" class="export-btn export-btn-secondary" type="button">Cancel</button>
+            <button id="exportConfirmBtn" class="export-btn export-btn-primary" type="button">Download Project</button>
         </div>
     </div>
 </div>
@@ -1611,27 +1707,34 @@
             showToast('Add or import tables before exporting.');
             return;
         }
+        document.getElementById('exportProjectName').value = state.schema.projectName || 'GeneratedMvcApp';
         elements.exportConfigOverlay.hidden = false;
     }
 
     async function exportProject() {
         let connectionString = '';
         const mode = document.querySelector('input[name="exportMode"]:checked').value;
-        const projectName = state.schema.projectName || 'GeneratedMvcApp';
+        const newProjectName = document.getElementById('exportProjectName').value.trim() || 'GeneratedMvcApp';
+        state.schema.projectName = newProjectName;
+        
+        let safeProjectName = newProjectName.replace(/[^A-Za-z0-9_]/g, '');
+        if (!safeProjectName) safeProjectName = 'GeneratedMvcApp';
+        if (/^[0-9]/.test(safeProjectName)) safeProjectName = 'Item' + safeProjectName;
 
         if (mode === 'local') {
-            const serverName = elements.localServerName.value.trim() || 'localhost';
-            connectionString = `Server=${serverName};Database=${projectName}Db;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true`;
+            const serverName = document.getElementById('localServerName').value.trim() || 'localhost';
+            connectionString = `Server=${serverName};Database=${safeProjectName}Db;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true`;
         } else if (mode === 'live') {
-            const serverName = elements.liveServerName.value.trim();
-            const login = elements.liveLogin.value.trim();
-            const password = elements.livePassword.value.trim();
-            connectionString = `Server=${serverName};Database=${projectName}Db;User Id=${login};Password=${password};TrustServerCertificate=True;MultipleActiveResultSets=true`;
+            const serverName = document.getElementById('liveServerName').value.trim();
+            const login = document.getElementById('liveLogin').value.trim();
+            const password = document.getElementById('livePassword').value.trim();
+            connectionString = `Server=${serverName};Database=${safeProjectName}Db;User Id=${login};Password=${password};TrustServerCertificate=True;MultipleActiveResultSets=true`;
         } else if (mode === 'preconfig') {
-            connectionString = `Server=103.72.56.55,2025;Database=${projectName}Db;User Id=sa;Password=!Pass123;TrustServerCertificate=True;MultipleActiveResultSets=true`;
+            connectionString = `Server=103.72.56.55,2025;Database=${safeProjectName}Db;User Id=sa;Password=!Pass123;TrustServerCertificate=True;MultipleActiveResultSets=true`;
         }
 
         state.schema.connectionString = connectionString;
+        state.schema.includeMockData = document.getElementById('exportIncludeMockData').checked;
 
         elements.exportConfirmBtn.disabled = true;
         elements.exportConfirmBtn.textContent = 'Exporting...';
@@ -1646,7 +1749,7 @@
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `${projectName}-aspnet-mvc-sqlserver.zip`;
+            link.download = `${safeProjectName}-aspnet-mvc-sqlserver.zip`;
             document.body.appendChild(link);
             link.click();
             link.remove();

@@ -173,10 +173,12 @@ app.Run();
             ? $"Server=103.72.56.55,2025;Database={projectName}Db;User Id=sa;Password=!Pass123;TrustServerCertificate=True;MultipleActiveResultSets=true"
             : connectionString;
 
+        var escapedCs = cs.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
         return $$"""
 {
   "ConnectionStrings": {
-    "DefaultConnection": "{{cs}}"
+    "DefaultConnection": "{{escapedCs}}"
   },
   "Logging": {
     "LogLevel": {
