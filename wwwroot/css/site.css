@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap");
+﻿@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap");
 
 :root {
   --bg-page: #eef3f8;
@@ -982,16 +982,16 @@ textarea:focus-visible {
 .relation-path {
   fill: none;
   stroke: currentColor;
-  color: #0284c7; /* Màu mặc định xanh dương sáng, hiển thị rõ ràng ngay từ đầu */
+  color: #0284c7; /* MÃ u máº·c Ä‘á»‹nh xanh dÆ°Æ¡ng sÃ¡ng, hiá»ƒn thá»‹ rÃµ rÃ ng ngay tá»« Ä‘áº§u */
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.8;
-  opacity: 0.85; /* Sáng rõ khi mới import */
+  opacity: 0.85; /* SÃ¡ng rÃµ khi má»›i import */
   transition: stroke-width 0.25s ease, opacity 0.25s ease, color 0.25s ease;
 }
 
 .relation-path.active {
-  color: #10b981; /* Xanh ngọc nổi bật khi bảng liên quan được chọn */
+  color: #10b981; /* Xanh ngá»c ná»•i báº­t khi báº£ng liÃªn quan Ä‘Æ°á»£c chá»n */
   stroke-width: 3.0;
   opacity: 1;
   filter: drop-shadow(0 0 3px rgba(16, 185, 129, 0.5));
@@ -999,11 +999,11 @@ textarea:focus-visible {
 
 .relation-path.dimmed {
   color: #94a3b8;
-  opacity: 0.15; /* Làm mờ các đường nối khác khi chọn một bảng */
+  opacity: 0.15; /* LÃ m má» cÃ¡c Ä‘Æ°á»ng ná»‘i khÃ¡c khi chá»n má»™t báº£ng */
 }
 
 .relation-label {
-  fill: #0284c7; /* Mặc định cùng tông màu xanh dương với liên kết */
+  fill: #0284c7; /* Máº·c Ä‘á»‹nh cÃ¹ng tÃ´ng mÃ u xanh dÆ°Æ¡ng vá»›i liÃªn káº¿t */
   font-size: 9px;
   font-weight: 800;
   paint-order: stroke;
@@ -1775,4 +1775,121 @@ textarea:focus-visible {
   .collab-form .btn {
     width: 100%;
   }
+}
+
+.canvas-inline-input {
+  width: 100%;
+  border: 1px solid rgba(20, 133, 245, 0.5);
+  border-radius: 3px;
+  padding: 0 3px;
+  color: var(--text);
+  background: #fff;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(20, 133, 245, 0.15);
+}
+
+.schema-table-header h3 .canvas-inline-input {
+  font-size: 11px;
+  font-weight: 800;
+  max-width: 132px;
+}
+
+.column-name .canvas-inline-input {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.column-type .canvas-inline-input {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  max-width: 64px;
+}
+
+.table-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.edit-table-btn {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 11px;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.edit-table-btn:hover {
+  border-color: rgba(20, 133, 245, 0.5);
+  color: var(--blue-deep);
+  background: var(--blue-soft);
+  transform: none;
+}
+
+.schema-table.editing {
+  border-color: rgba(20, 133, 245, 0.65);
+  box-shadow: 0 0 0 2px rgba(20, 133, 245, 0.12), 0 14px 28px rgba(15, 23, 42, 0.08);
+}
+
+.schema-table.editing .schema-table-header {
+  background: linear-gradient(180deg, #f7fbff, #eef6ff);
+}
+
+.table-name-input {
+  width: 100%;
+  max-width: 160px;
+  border: 1px solid rgba(20, 133, 245, 0.5);
+  border-radius: 4px;
+  padding: 4px 6px;
+  color: var(--text);
+  background: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(20, 133, 245, 0.15);
+}
+
+.table-row.editing {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) minmax(54px, auto) auto;
+  align-items: center;
+  gap: 5px;
+  min-height: 23px;
+  border-bottom: 1px solid #edf2f7;
+  padding: 0 8px;
+  background: transparent;
+}
+
+.table-row.editing .column-name,
+.table-row.editing .column-type {
+  width: 100%;
+  border: 1px solid rgba(20, 133, 245, 0.5);
+  border-radius: 3px;
+  padding: 1px 4px;
+  color: var(--text);
+  background: #fff;
+  font-size: inherit;
+  font-weight: inherit;
+  font-family: inherit;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(20, 133, 245, 0.15);
+}
+
+.table-row.editing .column-name {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.table-row.editing .column-type {
+  font-family: var(--font-mono);
+  font-size: 8px;
 }

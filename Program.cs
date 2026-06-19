@@ -1,12 +1,18 @@
+﻿using DoAnLapTrinhWeb.Data;
 using DoAnLapTrinhWeb.Services;
 using DoAnLapTrinhWeb.Hubs;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddSignalR();
+
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
 var authenticationBuilder = builder.Services
     .AddAuthentication(options =>
     {
@@ -37,9 +43,15 @@ builder.Services.AddSingleton<SqlSchemaParser>();
 builder.Services.AddSingleton<SchemaReviewService>();
 builder.Services.AddSingleton<AspNetMvcExportService>();
 builder.Services.AddSingleton<MockDataService>();
-builder.Services.AddSingleton<ProjectStore>();
+builder.Services.AddScoped<ProjectStore>();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+}
 
 if (!app.Environment.IsDevelopment())
 {

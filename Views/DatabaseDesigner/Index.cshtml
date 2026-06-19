@@ -1,4 +1,4 @@
-@model DoAnLapTrinhWeb.Models.Projects.DesignerWorkspaceViewModel
+﻿@model DoAnLapTrinhWeb.Models.Projects.DesignerWorkspaceViewModel
 @using System.Text.Json
 
 @{
@@ -251,7 +251,8 @@
         tableSearch: '',
         zoom: 0.48,
         projectId: currentProjectId,
-        applyingRemoteUpdate: false
+        applyingRemoteUpdate: false,
+        canvasEditTableId: null
     };
 
     const elements = {
@@ -820,9 +821,20 @@
 
     function renderCanvasTables() {
         elements.tableLayer.innerHTML = state.schema.tables.map(table => {
+            const isEditing = state.canvasEditTableId === table.id;
             const rows = table.columns
                 .sort((a, b) => a.order - b.order)
                 .map(column => {
+                    if (isEditing) {
+                        return `
+                            <div class="table-row editing">
+                                <span class="row-anchor ${column.foreignKeyTable ? 'fk' : column.isPrimaryKey ? 'pk' : ''}"></span>
+                                <input class="column-name" data-edit-column-name data-column-id="${column.id}" value="${escapeHtml(column.name)}" />
+                                <input class="column-type" data-edit-column-type data-column-id="${column.id}" value="${escapeHtml(column.sqlType)}" />
+                                <span class="column-badges">${columnFlagSummary(column)}</span>
+                            </div>
+                        `;
+                    }
                     return `
                         <button class="table-row ${column.id === state.selectedColumnId ? 'active' : ''}" type="button" data-select-column="${table.id}:${column.id}">
                             <span class="row-anchor ${column.foreignKeyTable ? 'fk' : column.isPrimaryKey ? 'pk' : ''}"></span>
@@ -834,16 +846,23 @@
                 }).join('');
 
             return `
-                <article class="schema-table ${table.id === state.selectedTableId ? 'selected' : ''}" style="transform: translate(${table.x}px, ${table.y}px);" data-table-id="${table.id}">
+                <article class="schema-table ${table.id === state.selectedTableId ? 'selected' : ''} ${isEditing ? 'editing' : ''}" style="transform: translate(${table.x}px, ${table.y}px);" data-table-id="${table.id}">
                     <header class="schema-table-header" data-drag-table="${table.id}">
                         <div>
-                            <h3>${escapeHtml(table.name)}</h3>
+                            ${isEditing
+                                ? `<input class="table-name-input" data-edit-table-name value="${escapeHtml(table.name)}" />`
+                                : `<h3>${escapeHtml(table.name)}</h3>`
+                            }
                             <span class="table-chip-row">
                                 <em>${table.columns.length} cols</em>
                                 <em>${relationCountForTable(table)} rels</em>
                             </span>
                         </div>
-                        <span>Table</span>
+                        <div class="table-header-actions">
+                            <button class="icon-btn small edit-table-btn" type="button" data-edit-table="${table.id}" aria-label="${isEditing ? 'Done editing' : 'Edit table'}">
+                                ${isEditing ? '✓' : '✏️'}
+                            </button>
+                        </div>
                     </header>
                     <div class="schema-table-body">${rows || '<div class="empty-columns">No columns</div>'}</div>
                     <footer class="schema-table-footer">Column-level anchors</footer>
@@ -871,7 +890,7 @@
             const start = columnAnchor(relation.table, relation.column, leftToRight ? 'right' : 'left');
             const end = columnAnchor(targetTable, targetColumn, leftToRight ? 'left' : 'right');
             
-            // Sử dụng các đoạn thẳng vuông góc (Orthogonal) kết hợp offset chống đè
+            // Sá»­ dá»¥ng cÃ¡c Ä‘oáº¡n tháº³ng vuÃ´ng gÃ³c (Orthogonal) káº¿t há»£p offset chá»‘ng Ä‘Ã¨
             const offset = 26 + (index % 5) * 18;
             const midX = leftToRight ? Math.max(start.x + offset, (start.x + end.x) / 2) : Math.min(start.x - offset, (start.x + end.x) / 2);
             const d = `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
@@ -1043,17 +1062,17 @@
         const tables = state.schema.tables;
         const tableMap = new Map(tables.map(t => [t.name.toLowerCase(), t]));
         
-        // Khởi tạo tầng mặc định cho mọi bảng
+        // Khá»Ÿi táº¡o táº§ng máº·c Ä‘á»‹nh cho má»i báº£ng
         const layers = new Map();
         tables.forEach(t => layers.set(t.id, 0));
 
-        // Dùng thuật toán DFS tính toán tầng phụ thuộc (depth of dependencies)
+        // DÃ¹ng thuáº­t toÃ¡n DFS tÃ­nh toÃ¡n táº§ng phá»¥ thuá»™c (depth of dependencies)
         const visited = new Set();
         const path = new Set();
 
         function calculateLayer(table) {
             if (path.has(table.id)) {
-                return layers.get(table.id); // Phát hiện chu kỳ, dùng giá trị hiện tại
+                return layers.get(table.id); // PhÃ¡t hiá»‡n chu ká»³, dÃ¹ng giÃ¡ trá»‹ hiá»‡n táº¡i
             }
             if (visited.has(table.id)) {
                 return layers.get(table.id);
@@ -1082,7 +1101,7 @@
 
         tables.forEach(table => calculateLayer(table));
 
-        // Nhóm các bảng theo tầng
+        // NhÃ³m cÃ¡c báº£ng theo táº§ng
         const layerGroups = new Map();
         tables.forEach(table => {
             const layer = layers.get(table.id) || 0;
@@ -1092,12 +1111,12 @@
             layerGroups.get(layer).push(table);
         });
 
-        // Bố trí tọa độ
+        // Bá»‘ trÃ­ tá»a Ä‘á»™
         const sortedLayerKeys = Array.from(layerGroups.keys()).sort((a, b) => a - b);
         const startX = 85;
         const startY = 55;
-        const colWidth = 360; // Khoảng cách cột đủ rộng cho đường nối Bezier
-        const rowGap = 40;    // Khoảng cách tối thiểu giữa các bảng cùng cột
+        const colWidth = 360; // Khoáº£ng cÃ¡ch cá»™t Ä‘á»§ rá»™ng cho Ä‘Æ°á»ng ná»‘i Bezier
+        const rowGap = 40;    // Khoáº£ng cÃ¡ch tá»‘i thiá»ƒu giá»¯a cÃ¡c báº£ng cÃ¹ng cá»™t
 
         sortedLayerKeys.forEach((layerKey, colIndex) => {
             const group = layerGroups.get(layerKey) || [];
@@ -1111,7 +1130,7 @@
             });
         });
 
-        // Giới hạn trong vùng canvasViewport
+        // Giá»›i háº¡n trong vÃ¹ng canvasViewport
         tables.forEach(table => {
             table.x = Math.max(24, Math.min(canvasSize.width - tableWidth - 24, table.x));
             table.y = Math.max(24, Math.min(canvasSize.height - tableHeight(table) - 24, table.y));
@@ -1678,6 +1697,14 @@
             return;
         }
 
+        const editTableButton = event.target.closest('[data-edit-table]');
+        if (editTableButton) {
+            const tableId = editTableButton.dataset.editTable;
+            state.canvasEditTableId = state.canvasEditTableId === tableId ? null : tableId;
+            render();
+            return;
+        }
+
         const tableButton = event.target.closest('[data-select-table]');
         if (tableButton) {
             state.selectedTableId = tableButton.dataset.selectTable;
@@ -1719,33 +1746,42 @@
             return;
         }
 
-        // Bấm chọn bảng khi click vào bất kỳ vị trí nào trên bảng
+        // Báº¥m chá»n báº£ng khi click vÃ o báº¥t ká»³ vá»‹ trÃ­ nÃ o trÃªn báº£ng
         const tableCard = event.target.closest('.schema-table');
         if (tableCard) {
             const tableId = tableCard.dataset.tableId;
-            if (state.selectedTableId !== tableId) {
-                state.selectedTableId = tableId;
-                const table = selectedTable();
-                if (table && (!state.selectedColumnId || !table.columns.some(c => c.id === state.selectedColumnId))) {
-                    state.selectedColumnId = table.columns[0]?.id || null;
+            const isEditingThisTable = state.canvasEditTableId === tableId;
+            const isInputClick = event.target.tagName === 'INPUT' || event.target.tagName === 'BUTTON';
+            if (!isEditingThisTable || !isInputClick) {
+                if (state.selectedTableId !== tableId) {
+                    state.selectedTableId = tableId;
+                    const table = selectedTable();
+                    if (table && (!state.selectedColumnId || !table.columns.some(c => c.id === state.selectedColumnId))) {
+                        state.selectedColumnId = table.columns[0]?.id || null;
+                    }
+                    render();
                 }
-                render();
             }
             return;
         }
 
-        // Bỏ chọn khi click vào khoảng trống của canvas
+        // Bá» chá»n khi click vÃ o khoáº£ng trá»‘ng cá»§a canvas
         const isCanvasViewport = event.target.closest('#canvasViewport') || event.target.id === 'canvasViewport';
         const isControlPanel = event.target.closest('.control-panel') || event.target.closest('.diagram-header') || event.target.closest('.review-overlay') || event.target.closest('.review-dialog');
         if (isCanvasViewport && !isControlPanel) {
             state.selectedTableId = null;
             state.selectedColumnId = null;
+            state.canvasEditTableId = null;
             render();
         }
     });
 
     document.addEventListener('input', event => {
-        const table = selectedTable();
+        let table = selectedTable();
+        const isCanvasEdit = state.canvasEditTableId && event.target.closest('.schema-table.editing');
+        if (isCanvasEdit) {
+            table = state.schema.tables.find(t => t.id === state.canvasEditTableId);
+        }
 
         if (event.target.matches('[data-edit-table-name]') && table) {
             const oldName = table.name;
@@ -1824,7 +1860,8 @@
         }
     });
 
-    document.addEventListener('pointerdown', event => {
+
+        document.addEventListener('pointerdown', event => {
         const dragHandle = event.target.closest('[data-drag-table]');
         if (!dragHandle) return;
         const table = state.schema.tables.find(candidate => candidate.id === dragHandle.dataset.dragTable);
