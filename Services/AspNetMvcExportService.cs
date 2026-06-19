@@ -7,7 +7,7 @@ namespace DoAnLapTrinhWeb.Services;
 
 public sealed class AspNetMvcExportService
 {
-    public byte[] CreateZip(DatabaseSchema inputSchema)
+    public byte[] CreateZip(DatabaseSchema inputSchema, string? seedSql = null)
     {
         var schema = NormalizeSchema(inputSchema);
         var entities = BuildEntityInfos(schema);
@@ -18,14 +18,19 @@ public sealed class AspNetMvcExportService
         {
             AddEntry(archive, $"{projectName}/{projectName}.csproj", GenerateProjectFile());
             AddEntry(archive, $"{projectName}/Program.cs", GenerateProgram(projectName));
-            AddEntry(archive, $"{projectName}/appsettings.json", GenerateAppSettings(projectName));
+            AddEntry(archive, $"{projectName}/appsettings.json", GenerateAppSettings(projectName, schema.ConnectionString));
             AddEntry(archive, $"{projectName}/appsettings.Development.json", GenerateDevelopmentAppSettings());
             AddEntry(archive, $"{projectName}/Dockerfile", GenerateDockerfile(projectName));
             AddEntry(archive, $"{projectName}/docker-compose.yml", GenerateDockerCompose(projectName));
             AddEntry(archive, $"{projectName}/README.md", GenerateReadme(projectName, schema));
             AddEntry(archive, $"{projectName}/Data/AppDbContext.cs", GenerateDbContext(projectName, entities));
-            AddEntry(archive, $"{projectName}/Data/DatabaseBootstrapper.cs", GenerateDatabaseBootstrapper(projectName));
+            AddEntry(archive, $"{projectName}/Data/DatabaseBootstrapper.cs", GenerateDatabaseBootstrapper(projectName, !string.IsNullOrWhiteSpace(seedSql)));
             AddEntry(archive, $"{projectName}/Migrations/InitialCreate.sql", GenerateSqlScript(schema));
+
+            if (!string.IsNullOrWhiteSpace(seedSql))
+            {
+                AddEntry(archive, $"{projectName}/Migrations/SeedData.sql", seedSql);
+            }
             AddEntry(archive, $"{projectName}/Controllers/HomeController.cs", GenerateHomeController(projectName));
             AddEntry(archive, $"{projectName}/Views/_ViewImports.cshtml", $"@using {projectName}\n@using {projectName}.Models\n@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers\n");
             AddEntry(archive, $"{projectName}/Views/_ViewStart.cshtml", "@{\n    Layout = \"_Layout\";\n}\n");
@@ -47,12 +52,14 @@ public sealed class AspNetMvcExportService
         var schema = new DatabaseSchema
         {
             ProjectName = ToSafeIdentifier(inputSchema.ProjectName, "GeneratedMvcApp"),
+            ConnectionString = inputSchema.ConnectionString,
             Tables = inputSchema.Tables
                 .Where(table => !string.IsNullOrWhiteSpace(table.Name))
                 .Select(table => new SchemaTable
                 {
                     Id = string.IsNullOrWhiteSpace(table.Id) ? Guid.NewGuid().ToString("N") : table.Id,
                     Name = table.Name.Trim(),
+                    LastValidName = string.IsNullOrWhiteSpace(table.LastValidName) ? table.Name.Trim() : table.LastValidName.Trim(),
                     X = table.X,
                     Y = table.Y,
                     Columns = table.Columns
@@ -160,12 +167,16 @@ app.Run();
 """;
     }
 
-    private static string GenerateAppSettings(string projectName)
+    private static string GenerateAppSettings(string projectName, string connectionString)
     {
+        var cs = string.IsNullOrWhiteSpace(connectionString)
+            ? $"Server=103.72.56.55,2025;Database={projectName}Db;User Id=sa;Password=!Pass123;TrustServerCertificate=True;MultipleActiveResultSets=true"
+            : connectionString;
+
         return $$"""
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Server=103.72.56.55,2025;Database={{projectName}}Db;User Id=sa;Password=!Pass123;TrustServerCertificate=True;MultipleActiveResultSets=true"
+    "DefaultConnection": "{{cs}}"
   },
   "Logging": {
     "LogLevel": {
@@ -410,8 +421,29 @@ volumes:
         }
     }
 
-    private static string GenerateDatabaseBootstrapper(string projectName)
+    private static string GenerateDatabaseBootstrapper(string projectName, bool hasSeedData = false)
     {
+        var seedBlock = !hasSeedData
+            ? string.Empty
+            : $$"""
+
+            // Chèn dữ liệu mẫu (Seed Data)
+            var seedPath = Path.Combine(AppContext.BaseDirectory, "Migrations", "SeedData.sql");
+            if (File.Exists(seedPath))
+            {
+                var seedSql = await File.ReadAllTextAsync(seedPath);
+                var batches = seedSql.Split(new[] { "\nGO\n", "\nGO\r\n", "\r\nGO\r\n", "\r\nGO\n" }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var batch in batches)
+                {
+                    var trimmed = batch.Trim();
+                    if (!string.IsNullOrWhiteSpace(trimmed))
+                    {
+                        await context.Database.ExecuteSqlRawAsync(trimmed);
+                    }
+                }
+            }
+""";
+
         return $$"""
 using Microsoft.EntityFrameworkCore;
 
@@ -429,6 +461,7 @@ public static class DatabaseBootstrapper
             try
             {
                 await context.Database.EnsureCreatedAsync();
+{{seedBlock}}
                 return;
             }
             catch when (attempt < 20)

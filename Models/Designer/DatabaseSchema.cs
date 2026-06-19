@@ -4,4 +4,6 @@ public class DatabaseSchema
 {
     public string ProjectName { get; set; } = "GeneratedMvcApp";
     public List<SchemaTable> Tables { get; set; } = new();
+    public bool IncludeMockData { get; set; }
+    public string ConnectionString { get; set; } = string.Empty;
 }

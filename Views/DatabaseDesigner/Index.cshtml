@@ -1,93 +1,147 @@
+@model DoAnLapTrinhWeb.Models.Projects.DesignerWorkspaceViewModel
+@using System.Text.Json
+
 @{
     ViewData["Title"] = "Database Designer";
+    var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+    var initialSchemaJson = JsonSerializer.Serialize(Model.Schema, jsonOptions);
+    var currentProjectIdJson = JsonSerializer.Serialize(Model.CurrentProjectId, jsonOptions);
+    var currentUserEmailJson = JsonSerializer.Serialize(Model.UserEmail, jsonOptions);
 }
 
 <section class="designer-shell">
-    <aside class="designer-panel designer-sidebar">
-        <div class="brand-block">
-            <span class="brand-mark">DB</span>
-            <div>
-                <p class="section-kicker">ASP.NET MVC Builder</p>
-                <h1>Database Designer</h1>
-                <p>Design schema first, review relationships with AI, then export ASP.NET Core MVC + SQL Server source.</p>
-            </div>
+    <aside class="control-panel">
+        <div class="control-header">
+            <p class="side-kicker">Control panel</p>
+            <a class="chip-button exit-project-btn" asp-controller="Projects" asp-action="Index" aria-label="Back to project management"><-</a>
         </div>
 
-        <label class="field-label" for="projectName">Project name</label>
-        <input id="projectName" class="text-input" value="GeneratedMvcApp" />
+        <div class="side-switch" role="tablist" aria-label="Designer panels">
+            <button class="side-switch-item active" type="button" data-side-mode="tables">Tables</button>
+            <button class="side-switch-item" type="button" data-side-mode="properties">Properties</button>
+        </div>
 
-        <div class="sql-card">
-            <div class="panel-title-row">
-                <div>
-                    <p class="section-kicker">SQL Import</p>
-                    <h2>Import database structure</h2>
+        <div class="selection-strip">
+            <span id="selectedTableName">No table</span>
+            <span><span id="sidebarColumnCount">0 columns</span> | <span id="sidebarRelationCount">0 relations</span></span>
+        </div>
+
+        <div id="tablesPane" class="side-pane">
+            <div class="side-card table-list-card">
+                <div class="side-card-title">
+                    <span>Schema tables</span>
+                    <small id="tableCount">0</small>
                 </div>
-                <span id="sqlStats" class="soft-pill">0 tables</span>
+                <div class="table-tools">
+                    <button class="chip-button chip-blue" type="button" data-add-table>+ New table</button>
+                    <label class="search-field">
+                        <span>Search</span>
+                        <input id="tableSearchInput" type="search" placeholder="Search table or column" />
+                    </label>
+                </div>
+                <div id="tableList" class="table-list"></div>
             </div>
-            <textarea id="sqlInput" class="sql-input" spellcheck="false" placeholder="Paste CREATE TABLE statements here..."></textarea>
-            <button id="importSqlBtn" class="btn btn-primary" type="button">Import SQL</button>
         </div>
 
-        <div class="action-grid">
-            <button id="addTableBtn" class="btn btn-light" type="button">Add table</button>
-            <button id="reviewBtn" class="btn btn-ai" type="button">
-                <span class="btn-spinner" aria-hidden="true"></span>
-                <span id="reviewBtnText">AI Review Database</span>
-            </button>
-            <button id="exportBtn" class="btn btn-dark" type="button">Export MVC + SQL Server</button>
-        </div>
-
-        <div class="table-list-card">
-            <div class="panel-title-row compact">
-                <h2>Tables</h2>
-                <span id="tableCount" class="soft-pill">0</span>
+        <div id="propertiesPane" class="side-pane" hidden>
+            <div class="side-card properties-card">
+                <div class="properties-topline">
+                    <p class="side-kicker">Properties</p>
+                    <button class="icon-btn small" type="button" data-side-mode="tables" aria-label="Close properties">x</button>
+                </div>
+                <div id="inspectorContent" class="inspector-content"></div>
             </div>
-            <div id="tableList" class="table-list"></div>
         </div>
     </aside>
 
     <main class="designer-panel designer-canvas-panel">
-        <div class="canvas-toolbar">
+        <div class="diagram-header">
             <div>
-                <p class="section-kicker">Schema canvas</p>
-                <h2>SQL Server diagram</h2>
-                <p>Drag tables on the canvas. Foreign keys are drawn as clear orthogonal relationship lines.</p>
+                <p class="section-kicker">Database</p>
+                <h1>ER Diagram</h1>
+                <p>DBeaver-style table view with column-level relation anchors.</p>
             </div>
-            <div class="toolbar-metrics">
-                <span id="relationCount" class="soft-pill">0 relations</span>
-                <button id="autoLayoutBtn" class="btn btn-light" type="button">Auto layout</button>
+            <div class="diagram-actions">
+                <button id="openSqlModalBtn" class="btn btn-light" type="button">Import SQL</button>
+                <button id="autoLayoutBtn" class="btn btn-light" type="button">Auto Arrange</button>
+                <button id="reviewBtn" class="btn btn-light" type="button">
+                    <span class="btn-spinner" aria-hidden="true"></span>
+                    <span id="reviewBtnText">AI Review</span>
+                </button>
+                <button id="exportBtn" class="btn btn-light" type="button">Export MVC</button>
+                <button id="addTableBtn" class="btn btn-primary" type="button">+ New table</button>
+                <button id="deleteAllTablesBtn" class="btn btn-danger" type="button">x Delete all tables</button>
             </div>
         </div>
 
-        <div id="canvasViewport" class="canvas-viewport">
-            <div id="canvas" class="schema-canvas">
-                <svg id="relationSvg" class="relation-svg" width="1800" height="1200" viewBox="0 0 1800 1200" aria-hidden="true">
-                    <defs>
-                        <marker id="arrowHead" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
-                            <path d="M0,0 L0,6 L7,3 z" fill="#1d6fe8"></path>
-                        </marker>
-                    </defs>
-                </svg>
-                <div id="tableLayer" class="table-layer"></div>
-                <div id="emptyCanvas" class="empty-canvas">
-                    <div class="empty-icon">+</div>
-                    <h3>No tables yet</h3>
-                    <p>Paste SQL or add tables manually to start designing.</p>
+        <div class="canvas-frame">
+            <div class="canvas-topbar">
+                <div class="canvas-title-block">
+                    <span class="canvas-icon">ER</span>
+                    <div>
+                        <strong>ER diagram canvas</strong>
+                        <small>Selected: <span id="canvasSelectedName">none</span></small>
+                    </div>
                 </div>
+                <div class="canvas-badges">
+                    <span id="sqlStats" class="soft-pill">0 tables</span>
+                    <span id="relationCount" class="soft-pill">0 relations</span>
+                    <span class="soft-pill success">routed lanes</span>
+                    <span class="soft-pill">Focus selection</span>
+                    <div class="zoom-pill" role="group" aria-label="Canvas zoom controls">
+                        <button id="zoomOutBtn" class="zoom-btn" type="button" aria-label="Zoom out">-</button>
+                        <strong id="zoomLevelLabel">48%</strong>
+                        <button id="zoomInBtn" class="zoom-btn" type="button" aria-label="Zoom in">+</button>
+                        <button id="fitViewBtn" class="fit-view-btn" type="button">Fit view</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="canvasViewport" class="canvas-viewport">
+                <div id="canvas" class="schema-canvas">
+                    <svg id="relationSvg" class="relation-svg" width="1800" height="1200" viewBox="0 0 1800 1200" aria-hidden="true">
+                        <defs>
+                            <marker id="arrowHead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto" markerUnits="strokeWidth">
+                                <path d="M0,0 L0,6 L6,3 z" fill="currentColor"></path>
+                            </marker>
+                        </defs>
+                    </svg>
+                    <div id="tableLayer" class="table-layer"></div>
+                    <div id="remoteCursorLayer" class="remote-cursor-layer"></div>
+                    <div id="emptyCanvas" class="empty-canvas">
+                        <div class="empty-icon">+</div>
+                        <h3>No tables yet</h3>
+                        <p>Import SQL or create a new table to start the diagram.</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="canvas-footer">
+                <span>Project: <strong id="footerProjectName">GeneratedMvcApp</strong></span>
+                <span id="canvasTipText">Tip: Ctrl + mouse wheel to zoom, drag table header to move.</span>
+                <span>Selected: <strong id="footerSelectedTable">none</strong></span>
             </div>
         </div>
     </main>
-
-    <aside class="designer-panel inspector-panel">
-        <div class="panel-title-row">
-            <div>
-                <p class="section-kicker">Inspector</p>
-                <h2>Properties</h2>
-            </div>
-        </div>
-        <div id="inspectorContent" class="inspector-content"></div>
-    </aside>
 </section>
+
+<div id="sqlImportOverlay" class="review-overlay" hidden>
+    <div class="review-dialog sql-import-dialog">
+        <div class="review-header">
+            <div>
+                <p class="section-kicker">SQL Import</p>
+                <h2>Import database structure</h2>
+                <p>Paste CREATE TABLE statements, then choose merge or overwrite when needed.</p>
+            </div>
+            <button id="closeSqlImportBtn" class="icon-btn" type="button" aria-label="Close SQL import">x</button>
+        </div>
+        <label class="field-label" for="projectName">Project name</label>
+        <input id="projectName" class="text-input" value="GeneratedMvcApp" />
+        <label class="field-label" for="sqlInput">SQL script</label>
+        <textarea id="sqlInput" class="sql-input" spellcheck="false" placeholder="Paste CREATE TABLE statements here..."></textarea>
+        <button id="importSqlBtn" class="btn btn-primary wide" type="button">Import SQL</button>
+    </div>
+</div>
 
 <div id="reviewOverlay" class="review-overlay" hidden>
     <div class="review-dialog">
@@ -97,7 +151,10 @@
                 <h2 id="reviewTitle">Relationship review</h2>
                 <p id="reviewSource">Database links only</p>
             </div>
-            <button id="closeReviewBtn" class="icon-btn" type="button" aria-label="Close review">×</button>
+            <div class="review-header-actions">
+                <button id="fixAllReviewBtn" class="btn btn-ai" type="button" hidden>Fix all</button>
+                <button id="closeReviewBtn" class="icon-btn" type="button" aria-label="Close review">x</button>
+            </div>
         </div>
         <div class="review-summary-grid">
             <div><strong id="issueTotal">0</strong><span>Issues</span></div>
@@ -111,39 +168,134 @@
 
 <div id="toast" class="toast-message" hidden></div>
 
+<div id="importConfirmOverlay" class="review-overlay" hidden>
+    <div class="review-dialog import-dialog">
+        <div class="import-dialog-header">
+            <p class="section-kicker">SQL Import</p>
+            <h2>Import Options</h2>
+            <p>Choose how you want to import the new tables into the database schema.</p>
+        </div>
+        <div class="import-choice-grid">
+            <button id="importOverwriteBtn" class="btn btn-danger" type="button">Overwrite Schema</button>
+            <button id="importMergeBtn" class="btn btn-primary no-offset" type="button">Merge Tables</button>
+        </div>
+        <button id="importCancelBtn" class="btn btn-light wide" type="button">Cancel</button>
+    </div>
+</div>
+
+<div id="exportConfigOverlay" class="review-overlay" hidden>
+    <div class="review-dialog import-dialog">
+        <div class="import-dialog-header">
+            <p class="section-kicker">Export</p>
+            <h2>Export MVC Application</h2>
+            <p>Configure the database connection for your exported project.</p>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.5rem; text-align: left;">
+            <label style="display: flex; gap: 0.5rem; align-items: center; font-weight: bold; cursor: pointer;">
+                <input type="radio" name="exportMode" value="local" checked onchange="document.getElementById('localConfigFields').style.display='flex'; document.getElementById('liveConfigFields').style.display='none'; document.getElementById('preconfigInfo').style.display='none';" /> Chạy local
+            </label>
+            <div id="localConfigFields" style="margin-left: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                <input type="text" id="localServerName" placeholder="Server name (e.g. localhost)" class="field-input" />
+            </div>
+
+            <label style="display: flex; gap: 0.5rem; align-items: center; font-weight: bold; cursor: pointer;">
+                <input type="radio" name="exportMode" value="live" onchange="document.getElementById('localConfigFields').style.display='none'; document.getElementById('liveConfigFields').style.display='flex'; document.getElementById('preconfigInfo').style.display='none';" /> Chạy live
+            </label>
+            <div id="liveConfigFields" style="margin-left: 1.5rem; display: none; flex-direction: column; gap: 0.5rem;">
+                <input type="text" id="liveServerName" placeholder="IP/Server name" class="field-input" />
+                <input type="text" id="liveLogin" placeholder="Login (e.g. sa)" class="field-input" />
+                <input type="password" id="livePassword" placeholder="Password" class="field-input" />
+            </div>
+
+            <label style="display: flex; gap: 0.5rem; align-items: center; font-weight: bold; cursor: pointer;">
+                <input type="radio" name="exportMode" value="preconfig" onchange="document.getElementById('localConfigFields').style.display='none'; document.getElementById('liveConfigFields').style.display='none'; document.getElementById('preconfigInfo').style.display='flex';" /> Chạy sẵn cấu hình
+            </label>
+            <div id="preconfigInfo" style="margin-left: 1.5rem; display: none; flex-direction: column; gap: 0.5rem;">
+                <p style="margin: 0; color: var(--muted); font-size: 0.95rem; line-height: 1.5;">
+                    <strong>Server:</strong> 103.72.56.55,2025<br/>
+                    <strong>Login:</strong> sa<br/>
+                    <strong>Password:</strong> !Pass123
+                </p>
+            </div>
+        </div>
+        <div class="import-choice-grid">
+            <button id="exportConfirmBtn" class="btn btn-primary" type="button">Export</button>
+            <button id="exportCancelBtn" class="btn btn-light no-offset" type="button">Cancel</button>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
 (() => {
+    const initialSchema = @Html.Raw(initialSchemaJson);
+    const currentProjectId = @Html.Raw(currentProjectIdJson);
+    const currentUserEmail = @Html.Raw(currentUserEmailJson);
     const canvasSize = { width: 1800, height: 1200 };
-    const tableWidth = 300;
-    const headerHeight = 86;
-    const rowHeight = 34;
+    const tableWidth = 214;
+    const headerHeight = 50;
+    const rowHeight = 23;
+    const minZoom = 0.35;
+    const maxZoom = 1.3;
+    const zoomStep = 0.08;
     const state = {
         schema: { projectName: 'GeneratedMvcApp', tables: [] },
         selectedTableId: null,
         selectedColumnId: null,
-        dragging: null
+        dragging: null,
+        lastReviewResult: null,
+        fixingReview: false,
+        sideMode: 'tables',
+        propertyTab: 'columns',
+        tableSearch: '',
+        zoom: 0.48,
+        projectId: currentProjectId,
+        applyingRemoteUpdate: false
     };
 
     const elements = {
         projectName: document.getElementById('projectName'),
         sqlInput: document.getElementById('sqlInput'),
+        sqlImportOverlay: document.getElementById('sqlImportOverlay'),
+        openSqlModalBtn: document.getElementById('openSqlModalBtn'),
+        closeSqlImportBtn: document.getElementById('closeSqlImportBtn'),
         importSqlBtn: document.getElementById('importSqlBtn'),
         addTableBtn: document.getElementById('addTableBtn'),
+        deleteAllTablesBtn: document.getElementById('deleteAllTablesBtn'),
         autoLayoutBtn: document.getElementById('autoLayoutBtn'),
         reviewBtn: document.getElementById('reviewBtn'),
         reviewBtnText: document.getElementById('reviewBtnText'),
+        canvasTipText: document.getElementById('canvasTipText'),
         exportBtn: document.getElementById('exportBtn'),
+        topExportBtn: document.getElementById('topExportBtn'),
         sqlStats: document.getElementById('sqlStats'),
         tableCount: document.getElementById('tableCount'),
         relationCount: document.getElementById('relationCount'),
+        selectedTableName: document.getElementById('selectedTableName'),
+        sidebarColumnCount: document.getElementById('sidebarColumnCount'),
+        sidebarRelationCount: document.getElementById('sidebarRelationCount'),
+        canvasSelectedName: document.getElementById('canvasSelectedName'),
+        footerProjectName: document.getElementById('footerProjectName'),
+        footerSelectedTable: document.getElementById('footerSelectedTable'),
+        tablesPane: document.getElementById('tablesPane'),
+        propertiesPane: document.getElementById('propertiesPane'),
+        tableSearchInput: document.getElementById('tableSearchInput'),
         tableList: document.getElementById('tableList'),
+        canvasViewport: document.getElementById('canvasViewport'),
+        canvas: document.getElementById('canvas'),
         tableLayer: document.getElementById('tableLayer'),
         relationSvg: document.getElementById('relationSvg'),
+        remoteCursorLayer: document.getElementById('remoteCursorLayer'),
         emptyCanvas: document.getElementById('emptyCanvas'),
+        zoomOutBtn: document.getElementById('zoomOutBtn'),
+        zoomInBtn: document.getElementById('zoomInBtn'),
+        fitViewBtn: document.getElementById('fitViewBtn'),
+        zoomLevelLabel: document.getElementById('zoomLevelLabel'),
         inspectorContent: document.getElementById('inspectorContent'),
         reviewOverlay: document.getElementById('reviewOverlay'),
         closeReviewBtn: document.getElementById('closeReviewBtn'),
+        fixAllReviewBtn: document.getElementById('fixAllReviewBtn'),
         reviewTitle: document.getElementById('reviewTitle'),
         reviewSource: document.getElementById('reviewSource'),
         issueTotal: document.getElementById('issueTotal'),
@@ -151,7 +303,26 @@
         issueMedium: document.getElementById('issueMedium'),
         issueLow: document.getElementById('issueLow'),
         reviewIssues: document.getElementById('reviewIssues'),
-        toast: document.getElementById('toast')
+        toast: document.getElementById('toast'),
+        importConfirmOverlay: document.getElementById('importConfirmOverlay'),
+        importOverwriteBtn: document.getElementById('importOverwriteBtn'),
+        importMergeBtn: document.getElementById('importMergeBtn'),
+        importCancelBtn: document.getElementById('importCancelBtn'),
+        exportConfigOverlay: document.getElementById('exportConfigOverlay'),
+        exportConfirmBtn: document.getElementById('exportConfirmBtn'),
+        exportCancelBtn: document.getElementById('exportCancelBtn'),
+        localServerName: document.getElementById('localServerName'),
+        liveServerName: document.getElementById('liveServerName'),
+        liveLogin: document.getElementById('liveLogin'),
+        livePassword: document.getElementById('livePassword')
+    };
+
+    const collaboration = {
+        connection: null,
+        schemaTimer: null,
+        cursorTimer: null,
+        cursorColor: colorFromEmail(currentUserEmail),
+        remoteCursors: new Map()
     };
 
     function uid() {
@@ -159,6 +330,17 @@
             return crypto.randomUUID().replaceAll('-', '');
         }
         return Math.random().toString(16).slice(2) + Date.now().toString(16);
+    }
+
+    function colorFromEmail(email) {
+        const palette = ['#1485f5', '#047857', '#b45309', '#be123c', '#7c3aed', '#0f766e', '#db2777'];
+        const source = String(email || 'guest');
+        let hash = 0;
+        for (let index = 0; index < source.length; index++) {
+            hash = ((hash << 5) - hash) + source.charCodeAt(index);
+            hash |= 0;
+        }
+        return palette[Math.abs(hash) % palette.length];
     }
 
     function escapeHtml(value) {
@@ -175,9 +357,10 @@
             projectName: schema.projectName || elements.projectName.value || 'GeneratedMvcApp',
             tables: (schema.tables || []).map((table, tableIndex) => ({
                 id: table.id || uid(),
-                name: table.name || `table_${tableIndex + 1}`,
-                x: Number.isFinite(Number(table.x)) ? Number(table.x) : 80 + (tableIndex % 3) * 380,
-                y: Number.isFinite(Number(table.y)) ? Number(table.y) : 80 + Math.floor(tableIndex / 3) * 320,
+                name: table.name ?? `table_${tableIndex + 1}`,
+                lastValidName: table.lastValidName || table.name || `table_${tableIndex + 1}`,
+                x: Number.isFinite(Number(table.x)) ? Number(table.x) : 85 + (tableIndex % 3) * 330,
+                y: Number.isFinite(Number(table.y)) ? Number(table.y) : 55 + Math.floor(tableIndex / 3) * 220,
                 columns: (table.columns || []).map((column, columnIndex) => ({
                     id: column.id || uid(),
                     name: column.name || `column_${columnIndex + 1}`,
@@ -192,8 +375,24 @@
             }))
         };
         elements.projectName.value = state.schema.projectName;
-        if (!state.selectedTableId && state.schema.tables.length > 0) {
+        if (state.schema.tables.length === 0) {
+            state.selectedTableId = null;
+            state.selectedColumnId = null;
+            return;
+        }
+
+        if (!state.schema.tables.some(table => table.id === state.selectedTableId)) {
             state.selectedTableId = state.schema.tables[0].id;
+        }
+        const table = state.schema.tables.find(candidate => candidate.id === state.selectedTableId);
+        if (!table) {
+            state.selectedTableId = null;
+            state.selectedColumnId = null;
+            return;
+        }
+
+        if (!table.columns.some(column => column.id === state.selectedColumnId)) {
+            state.selectedColumnId = table.columns[0]?.id || null;
         }
     }
 
@@ -204,6 +403,14 @@
     function selectedColumn() {
         const table = selectedTable();
         return table ? table.columns.find(column => column.id === state.selectedColumnId) || null : null;
+    }
+
+    function findColumnById(columnId) {
+        for (const table of state.schema.tables) {
+            const column = table.columns.find(candidate => candidate.id === columnId);
+            if (column) return { table, column };
+        }
+        return { table: null, column: null };
     }
 
     function relationColumns() {
@@ -219,30 +426,396 @@
         showToast.timer = setTimeout(() => elements.toast.hidden = true, 3200);
     }
 
+    function collaborationReady() {
+        return Boolean(state.projectId && collaboration.connection && collaboration.connection.state === signalR.HubConnectionState.Connected);
+    }
+
+    function scheduleSchemaBroadcast(delay = 320) {
+        if (state.applyingRemoteUpdate || !state.projectId || !collaboration.connection) return;
+        clearTimeout(collaboration.schemaTimer);
+        collaboration.schemaTimer = setTimeout(broadcastSchema, delay);
+    }
+
+    async function broadcastSchema() {
+        if (state.applyingRemoteUpdate || !collaborationReady()) return;
+        try {
+            await collaboration.connection.invoke('BroadcastSchema', state.projectId, state.schema);
+            elements.canvasTipText.textContent = 'Realtime synced.';
+        } catch (error) {
+            elements.canvasTipText.textContent = 'Realtime sync paused.';
+        }
+    }
+
+    function applyRemoteSchema(schema, email) {
+        state.applyingRemoteUpdate = true;
+        normalizeSchema(schema || { projectName: 'GeneratedMvcApp', tables: [] });
+        render();
+        state.applyingRemoteUpdate = false;
+        elements.canvasTipText.textContent = `Updated by ${email || 'teammate'}.`;
+    }
+
+    function updateRemoteCursor(cursor) {
+        if (!cursor?.email || cursor.email === currentUserEmail) return;
+        let cursorEl = collaboration.remoteCursors.get(cursor.email);
+        if (!cursorEl) {
+            cursorEl = document.createElement('div');
+            cursorEl.className = 'remote-cursor';
+            cursorEl.innerHTML = '<span class="remote-cursor-pointer"></span><strong></strong>';
+            elements.remoteCursorLayer.appendChild(cursorEl);
+            collaboration.remoteCursors.set(cursor.email, cursorEl);
+        }
+
+        cursorEl.style.transform = `translate(${Number(cursor.x) || 0}px, ${Number(cursor.y) || 0}px)`;
+        cursorEl.style.setProperty('--cursor-color', cursor.color || colorFromEmail(cursor.email));
+        cursorEl.querySelector('strong').textContent = cursor.email;
+        clearTimeout(cursorEl.hideTimer);
+        cursorEl.hidden = false;
+        cursorEl.hideTimer = setTimeout(() => {
+            cursorEl.hidden = true;
+        }, 5000);
+    }
+
+    function removeRemoteCursor(email) {
+        const cursorEl = collaboration.remoteCursors.get(email);
+        if (!cursorEl) return;
+        cursorEl.remove();
+        collaboration.remoteCursors.delete(email);
+    }
+
+    async function startCollaboration() {
+        if (!state.projectId) {
+            elements.canvasTipText.textContent = 'Create or open a project to enable realtime collaboration.';
+            return;
+        }
+
+        if (!window.signalR) {
+            elements.canvasTipText.textContent = 'Realtime script did not load.';
+            return;
+        }
+
+        collaboration.connection = new signalR.HubConnectionBuilder()
+            .withUrl('/hubs/project-collaboration')
+            .withAutomaticReconnect()
+            .build();
+
+        collaboration.connection.on('SchemaUpdated', applyRemoteSchema);
+        collaboration.connection.on('CursorMoved', updateRemoteCursor);
+        collaboration.connection.on('UserLeft', removeRemoteCursor);
+        collaboration.connection.on('UserJoined', email => {
+            elements.canvasTipText.textContent = `${email} joined this project.`;
+        });
+        collaboration.connection.onreconnected(async () => {
+            try {
+                await collaboration.connection.invoke('JoinProject', state.projectId);
+                elements.canvasTipText.textContent = 'Realtime collaboration reconnected.';
+            } catch {
+                elements.canvasTipText.textContent = 'Could not rejoin realtime project.';
+            }
+        });
+
+        try {
+            await collaboration.connection.start();
+            await collaboration.connection.invoke('JoinProject', state.projectId);
+            elements.canvasTipText.textContent = 'Realtime collaboration is on.';
+        } catch {
+            elements.canvasTipText.textContent = 'Realtime collaboration is unavailable.';
+        }
+    }
+
+    function broadcastCursor(event) {
+        if (!collaborationReady()) return;
+        const viewport = elements.canvasViewport;
+        const rect = viewport.getBoundingClientRect();
+        const x = (viewport.scrollLeft + event.clientX - rect.left) / state.zoom;
+        const y = (viewport.scrollTop + event.clientY - rect.top) / state.zoom;
+        if (collaboration.cursorTimer) return;
+        collaboration.cursorTimer = setTimeout(async () => {
+            collaboration.cursorTimer = null;
+            try {
+                await collaboration.connection.invoke('MoveCursor', state.projectId, x, y, collaboration.cursorColor);
+            } catch {
+                // Cursor updates are best-effort only.
+            }
+        }, 45);
+    }
+
+    function clampZoom(value) {
+        return Math.max(minZoom, Math.min(maxZoom, Number(value) || state.zoom));
+    }
+
+    function tableHeight(table) {
+        return headerHeight + Math.max(table.columns.length, 1) * rowHeight + 24;
+    }
+
+    function applyZoom() {
+        const zoom = clampZoom(state.zoom);
+        state.zoom = zoom;
+        elements.canvas.style.width = `${Math.ceil(canvasSize.width * zoom)}px`;
+        elements.canvas.style.height = `${Math.ceil(canvasSize.height * zoom)}px`;
+        [elements.relationSvg, elements.tableLayer, elements.emptyCanvas].forEach(layer => {
+            layer.style.transform = `scale(${zoom})`;
+            layer.style.transformOrigin = '0 0';
+        });
+        elements.zoomLevelLabel.textContent = `${Math.round(zoom * 100)}%`;
+        elements.zoomOutBtn.disabled = zoom <= minZoom + 0.001;
+        elements.zoomInBtn.disabled = zoom >= maxZoom - 0.001;
+    }
+
+    function setZoom(nextZoom, anchorClientPoint = null) {
+        const viewport = elements.canvasViewport;
+        const oldZoom = state.zoom;
+        const newZoom = clampZoom(nextZoom);
+        const rect = viewport.getBoundingClientRect();
+        const anchor = anchorClientPoint || {
+            x: rect.left + viewport.clientWidth / 2,
+            y: rect.top + viewport.clientHeight / 2
+        };
+        const anchorOffsetX = anchor.x - rect.left;
+        const anchorOffsetY = anchor.y - rect.top;
+        const contentX = (viewport.scrollLeft + anchorOffsetX) / oldZoom;
+        const contentY = (viewport.scrollTop + anchorOffsetY) / oldZoom;
+
+        state.zoom = newZoom;
+        applyZoom();
+        viewport.scrollLeft = Math.max(0, contentX * state.zoom - anchorOffsetX);
+        viewport.scrollTop = Math.max(0, contentY * state.zoom - anchorOffsetY);
+    }
+
+    function fitView() {
+        const viewport = elements.canvasViewport;
+        if (state.schema.tables.length === 0) {
+            state.zoom = 0.48;
+            applyZoom();
+            viewport.scrollLeft = 0;
+            viewport.scrollTop = 0;
+            return;
+        }
+
+        const padding = 90;
+        const bounds = state.schema.tables.reduce((current, table) => ({
+            minX: Math.min(current.minX, table.x),
+            minY: Math.min(current.minY, table.y),
+            maxX: Math.max(current.maxX, table.x + tableWidth),
+            maxY: Math.max(current.maxY, table.y + tableHeight(table))
+        }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
+
+        const targetWidth = Math.max(1, bounds.maxX - bounds.minX + padding * 2);
+        const targetHeight = Math.max(1, bounds.maxY - bounds.minY + padding * 2);
+        state.zoom = clampZoom(Math.min(viewport.clientWidth / targetWidth, viewport.clientHeight / targetHeight, 0.9));
+        applyZoom();
+        viewport.scrollLeft = Math.max(0, (bounds.minX - padding) * state.zoom);
+        viewport.scrollTop = Math.max(0, (bounds.minY - padding) * state.zoom);
+    }
+
     function render() {
+        const activeEl = document.activeElement;
+        let focusSelector = null;
+        let selectionStart = null;
+        let selectionEnd = null;
+
+        if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) {
+            if (activeEl.hasAttribute('data-edit-table-name')) {
+                focusSelector = '[data-edit-table-name]';
+            } else if (activeEl.hasAttribute('data-edit-column-name')) {
+                const columnId = activeEl.getAttribute('data-column-id');
+                focusSelector = `[data-edit-column-name][data-column-id="${columnId}"]`;
+            } else if (activeEl.hasAttribute('data-edit-column-type')) {
+                const columnId = activeEl.getAttribute('data-column-id');
+                focusSelector = `[data-edit-column-type][data-column-id="${columnId}"]`;
+            } else if (activeEl.hasAttribute('data-edit-pk')) {
+                const columnId = activeEl.getAttribute('data-column-id');
+                focusSelector = `[data-edit-pk][data-column-id="${columnId}"]`;
+            } else if (activeEl.hasAttribute('data-edit-nullable')) {
+                const columnId = activeEl.getAttribute('data-column-id');
+                focusSelector = `[data-edit-nullable][data-column-id="${columnId}"]`;
+            } else if (activeEl.hasAttribute('data-edit-unique')) {
+                const columnId = activeEl.getAttribute('data-column-id');
+                focusSelector = `[data-edit-unique][data-column-id="${columnId}"]`;
+            } else if (activeEl.hasAttribute('data-edit-fk-table')) {
+                focusSelector = '[data-edit-fk-table]';
+            } else if (activeEl.hasAttribute('data-edit-fk-column')) {
+                focusSelector = '[data-edit-fk-column]';
+            } else if (activeEl.id) {
+                focusSelector = `#${activeEl.id}`;
+            }
+
+            if (focusSelector) {
+                try {
+                    selectionStart = activeEl.selectionStart;
+                    selectionEnd = activeEl.selectionEnd;
+                } catch (e) {
+                    // ignore if not supported by input type
+                }
+            }
+        }
+
         state.schema.projectName = elements.projectName.value || 'GeneratedMvcApp';
+        const table = selectedTable();
+        const selectedRelations = table
+            ? relationColumns().filter(relation => relation.table.id === table.id || relation.column.foreignKeyTable.toLowerCase() === table.name.toLowerCase()).length
+            : 0;
         elements.sqlStats.textContent = `${state.schema.tables.length} tables`;
         elements.tableCount.textContent = state.schema.tables.length;
         elements.relationCount.textContent = `${relationColumns().length} relations`;
+        elements.selectedTableName.textContent = table?.name || 'No table';
+        elements.sidebarColumnCount.textContent = `${table?.columns.length || 0} columns`;
+        elements.sidebarRelationCount.textContent = `${selectedRelations} relations`;
+        elements.canvasSelectedName.textContent = table?.name || 'none';
+        elements.footerProjectName.textContent = state.schema.projectName;
+        elements.footerSelectedTable.textContent = table?.name || 'none';
+        elements.tablesPane.hidden = state.sideMode !== 'tables';
+        elements.propertiesPane.hidden = state.sideMode !== 'properties';
+        document.querySelectorAll('[data-side-mode]').forEach(button => {
+            button.classList.toggle('active', button.dataset.sideMode === state.sideMode);
+        });
         elements.emptyCanvas.hidden = state.schema.tables.length > 0;
         renderTableList();
         renderCanvasTables();
         renderRelations();
         renderInspector();
+        applyZoom();
+
+        if (focusSelector) {
+            const newActiveEl = document.querySelector(focusSelector);
+            if (newActiveEl) {
+                newActiveEl.focus();
+                if (selectionStart !== null && selectionEnd !== null) {
+                    try {
+                        newActiveEl.setSelectionRange(selectionStart, selectionEnd);
+                    } catch (e) {
+                        // ignore if not supported
+                    }
+                }
+            }
+        }
     }
 
     function renderTableList() {
+        const query = state.tableSearch.trim().toLowerCase();
+        const tables = query
+            ? state.schema.tables.filter(table =>
+                table.name.toLowerCase().includes(query) ||
+                table.columns.some(column => column.name.toLowerCase().includes(query) || column.sqlType.toLowerCase().includes(query)))
+            : state.schema.tables;
+
         if (state.schema.tables.length === 0) {
             elements.tableList.innerHTML = '<div class="empty-list">No tables yet.</div>';
             return;
         }
 
-        elements.tableList.innerHTML = state.schema.tables.map(table => `
-            <button class="table-list-item ${table.id === state.selectedTableId ? 'active' : ''}" type="button" data-select-table="${table.id}">
-                <span>${escapeHtml(table.name)}</span>
-                <small>${table.columns.length} cols</small>
-            </button>
-        `).join('');
+        if (tables.length === 0) {
+            elements.tableList.innerHTML = '<div class="empty-list">No matching tables.</div>';
+            return;
+        }
+
+        elements.tableList.innerHTML = tables.map(table => {
+            const isActive = table.id === state.selectedTableId;
+            const relations = table.columns.filter(column => column.foreignKeyTable).length;
+            const previewColumns = table.columns
+                .slice(0, 5)
+                .map(column => `
+                    <li>
+                        <span class="${column.isPrimaryKey ? 'column-dot pk' : column.foreignKeyTable ? 'column-dot fk' : 'column-dot'}"></span>
+                        ${escapeHtml(column.name)}
+                    </li>
+                `).join('');
+            return `
+                <article class="table-list-item ${isActive ? 'active' : ''}">
+                    <button class="table-list-main" type="button" data-select-table="${table.id}">
+                        <span class="table-list-name">v ${escapeHtml(table.name)}</span>
+                        <small>${table.columns.length}</small>
+                    </button>
+                    ${isActive ? `
+                        <div class="table-mini-meta">
+                            <span>${table.columns.length} cols</span>
+                            <span>${table.columns.filter(column => column.isPrimaryKey).length} PK</span>
+                            <span>${relations} FK</span>
+                        </div>
+                        <ul class="table-column-preview">${previewColumns}</ul>
+                        ${table.columns.length > 5 ? `<p class="more-line">+ ${table.columns.length - 5} more</p>` : ''}
+                    ` : ''}
+                </article>
+            `;
+        }).join('');
+    }
+
+    function columnFlagSummary(column) {
+        const flags = [];
+        if (column.isPrimaryKey) flags.push('<span class="badge pk">PK</span>');
+        if (column.foreignKeyTable) flags.push('<span class="badge fk">FK</span>');
+        if (column.isUnique) flags.push('<span class="badge uq">UQ</span>');
+        if (!column.isNullable) flags.push('<span class="badge req">REQ</span>');
+        return flags.join('');
+    }
+
+    function typeLabel(type) {
+        return String(type || '').replace(/\(.+\)/, '').toUpperCase();
+    }
+
+    function relationCountForTable(table) {
+        return relationColumns().filter(relation =>
+            relation.table.id === table.id ||
+            relation.column.foreignKeyTable.toLowerCase() === table.name.toLowerCase()).length;
+    }
+
+    function apiReadyCount(table) {
+        return table.columns.filter(column => column.isPrimaryKey || column.foreignKeyTable || column.isUnique).length;
+    }
+
+    function setPropertyTab(tab) {
+        state.propertyTab = tab;
+        state.sideMode = 'properties';
+        render();
+    }
+
+    function deleteSelectedTable() {
+        const table = selectedTable();
+        if (!table) return;
+        const tableReferenceName = table.name || table.lastValidName || '';
+        state.schema.tables = state.schema.tables.filter(candidate => candidate.id !== table.id);
+        state.schema.tables.forEach(candidate => candidate.columns.forEach(column => {
+            if (tableReferenceName && column.foreignKeyTable === tableReferenceName) {
+                column.foreignKeyTable = '';
+                column.foreignKeyColumn = '';
+            }
+        }));
+        state.selectedTableId = state.schema.tables[0]?.id || null;
+        state.selectedColumnId = state.schema.tables[0]?.columns[0]?.id || null;
+        render();
+        scheduleSchemaBroadcast();
+    }
+
+    function deleteAllTables() {
+        if (state.schema.tables.length === 0) return;
+        if (!window.confirm('Delete all tables from the current diagram?')) return;
+        state.schema.tables = [];
+        state.selectedTableId = null;
+        state.selectedColumnId = null;
+        state.lastReviewResult = null;
+        render();
+        scheduleSchemaBroadcast();
+        showToast('Deleted all tables from the diagram.');
+    }
+
+    function openSqlImport() {
+        elements.sqlImportOverlay.hidden = false;
+        elements.sqlInput.focus();
+    }
+
+    function closeSqlImport() {
+        elements.sqlImportOverlay.hidden = true;
+    }
+
+    function renderPropertyTabs() {
+        return `
+            <div class="property-tabs">
+                ${['columns', 'relations', 'overview'].map(tab => `
+                    <button class="${state.propertyTab === tab ? 'active' : ''}" type="button" data-prop-tab="${tab}">
+                        ${tab[0].toUpperCase()}${tab.slice(1)}
+                    </button>
+                `).join('')}
+            </div>
+        `;
     }
 
     function renderCanvasTables() {
@@ -250,15 +823,12 @@
             const rows = table.columns
                 .sort((a, b) => a.order - b.order)
                 .map(column => {
-                    const badges = [];
-                    if (column.isPrimaryKey) badges.push('<span class="badge pk">PK</span>');
-                    if (column.foreignKeyTable) badges.push('<span class="badge fk">FK</span>');
-                    if (column.isUnique) badges.push('<span class="badge uq">UQ</span>');
                     return `
                         <button class="table-row ${column.id === state.selectedColumnId ? 'active' : ''}" type="button" data-select-column="${table.id}:${column.id}">
+                            <span class="row-anchor ${column.foreignKeyTable ? 'fk' : column.isPrimaryKey ? 'pk' : ''}"></span>
                             <span class="column-name">${escapeHtml(column.name)}</span>
                             <span class="column-type">${escapeHtml(column.sqlType)}</span>
-                            <span class="column-badges">${badges.join('')}</span>
+                            <span class="column-badges">${columnFlagSummary(column)}</span>
                         </button>
                     `;
                 }).join('');
@@ -267,12 +837,16 @@
                 <article class="schema-table ${table.id === state.selectedTableId ? 'selected' : ''}" style="transform: translate(${table.x}px, ${table.y}px);" data-table-id="${table.id}">
                     <header class="schema-table-header" data-drag-table="${table.id}">
                         <div>
-                            <small>table</small>
                             <h3>${escapeHtml(table.name)}</h3>
+                            <span class="table-chip-row">
+                                <em>${table.columns.length} cols</em>
+                                <em>${relationCountForTable(table)} rels</em>
+                            </span>
                         </div>
-                        <span>${table.columns.length} cols</span>
+                        <span>Table</span>
                     </header>
                     <div class="schema-table-body">${rows || '<div class="empty-columns">No columns</div>'}</div>
+                    <footer class="schema-table-footer">Column-level anchors</footer>
                 </article>
             `;
         }).join('');
@@ -283,6 +857,7 @@
         const paths = [];
         const labels = [];
         const relations = relationColumns();
+        const activeTable = selectedTable();
 
         relations.forEach((relation, index) => {
             const targetTable = state.schema.tables.find(table => table.name.toLowerCase() === relation.column.foreignKeyTable.toLowerCase());
@@ -295,13 +870,21 @@
             const leftToRight = relation.table.x <= targetTable.x;
             const start = columnAnchor(relation.table, relation.column, leftToRight ? 'right' : 'left');
             const end = columnAnchor(targetTable, targetColumn, leftToRight ? 'left' : 'right');
+            
+            // Sử dụng các đoạn thẳng vuông góc (Orthogonal) kết hợp offset chống đè
             const offset = 26 + (index % 5) * 18;
             const midX = leftToRight ? Math.max(start.x + offset, (start.x + end.x) / 2) : Math.min(start.x - offset, (start.x + end.x) / 2);
             const d = `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
 
-            paths.push(`<path class="relation-path" d="${d}" marker-end="url(#arrowHead)"></path>`);
-            labels.push(`<text class="relation-label" x="${end.x + (leftToRight ? -44 : 14)}" y="${end.y - 8}">1</text>`);
-            labels.push(`<text class="relation-label many" x="${start.x + (leftToRight ? 12 : -46)}" y="${start.y - 8}">1..*</text>`);
+            let statusClass = '';
+            if (activeTable) {
+                const isRelated = relation.table.id === activeTable.id || targetTable.id === activeTable.id;
+                statusClass = isRelated ? 'active' : 'dimmed';
+            }
+
+            paths.push(`<path class="relation-path ${statusClass}" d="${d}" marker-end="url(#arrowHead)"></path>`);
+            labels.push(`<text class="relation-label ${statusClass}" x="${end.x + (leftToRight ? -44 : 14)}" y="${end.y - 8}">1</text>`);
+            labels.push(`<text class="relation-label many ${statusClass}" x="${start.x + (leftToRight ? 12 : -46)}" y="${start.y - 8}">1..*</text>`);
         });
 
         elements.relationSvg.innerHTML = defs + paths.join('') + labels.join('');
@@ -330,7 +913,7 @@
             return;
         }
 
-        const fkTableOptions = ['<option value="">No relationship</option>']
+        const fkTableOptions = ['<option value="">Select target table</option>']
             .concat(state.schema.tables
                 .filter(candidate => candidate.id !== table.id)
                 .map(candidate => `<option value="${escapeHtml(candidate.name)}" ${column?.foreignKeyTable === candidate.name ? 'selected' : ''}>${escapeHtml(candidate.name)}</option>`))
@@ -343,53 +926,199 @@
             ? targetTable.columns.map(candidate => `<option value="${escapeHtml(candidate.name)}" ${column?.foreignKeyColumn === candidate.name ? 'selected' : ''}>${escapeHtml(candidate.name)}</option>`).join('')
             : '<option value="">Target column</option>';
 
-        elements.inspectorContent.innerHTML = `
-            <div class="editor-section">
+        const columnCards = table.columns.map(col => `
+            <article class="property-column-card ${col.id === state.selectedColumnId ? 'active' : ''}">
+                <button class="property-column-pick" type="button" data-select-column="${table.id}:${col.id}">
+                    <span>${escapeHtml(col.name)}</span>
+                    <small>${escapeHtml(typeLabel(col.sqlType))}</small>
+                </button>
+                <div class="column-editor-grid">
+                    <label>
+                        <span>Name</span>
+                        <input class="text-input compact" data-edit-column-name data-column-id="${col.id}" value="${escapeHtml(col.name)}" />
+                    </label>
+                    <label>
+                        <span>Type</span>
+                        <input class="text-input compact" data-edit-column-type data-column-id="${col.id}" value="${escapeHtml(col.sqlType)}" />
+                    </label>
+                </div>
+                <div class="column-flags">
+                    <label><input type="checkbox" data-edit-pk data-column-id="${col.id}" ${col.isPrimaryKey ? 'checked' : ''} /> PK</label>
+                    <label><input type="checkbox" data-edit-nullable data-column-id="${col.id}" ${col.isNullable ? 'checked' : ''} ${col.isPrimaryKey ? 'disabled' : ''} /> Nullable</label>
+                    <label><input type="checkbox" data-edit-unique data-column-id="${col.id}" ${col.isUnique ? 'checked' : ''} /> Unique</label>
+                </div>
+                <div class="column-card-actions">
+                    ${col.foreignKeyTable ? `<span class="relation-note">FK: ${escapeHtml(col.foreignKeyTable)}.${escapeHtml(col.foreignKeyColumn || 'id')}</span>` : '<span class="relation-note muted">No FK</span>'}
+                    <button class="round-danger" type="button" data-delete-column="${col.id}">Delete</button>
+                </div>
+            </article>
+        `).join('');
+
+        const relationCards = table.columns
+            .filter(col => col.foreignKeyTable)
+            .map(col => `
+                <article class="relation-card">
+                    <div>
+                        <span class="relation-direction">Outgoing</span>
+                        <strong>${escapeHtml(table.name)}.${escapeHtml(col.name)} -></strong>
+                    </div>
+                    <p>${escapeHtml(col.foreignKeyTable)}.${escapeHtml(col.foreignKeyColumn || 'id')}</p>
+                    <button class="round-danger" type="button" data-clear-fk="${col.id}">Remove</button>
+                </article>
+            `).join('');
+
+        const overviewPane = `
+            <div class="overview-panel">
+                <h3>Overview</h3>
+                <p class="muted">Essential table summary and actions.</p>
+                <div class="overview-metrics">
+                    <div><strong>${table.columns.length}</strong><span>Columns</span></div>
+                    <div><strong>${relationCountForTable(table)}</strong><span>Relations</span></div>
+                    <div><strong>${apiReadyCount(table)}</strong><span>API ready</span></div>
+                </div>
                 <label class="field-label">Table name</label>
                 <input class="text-input" data-edit-table-name value="${escapeHtml(table.name)}" />
-                <div class="mini-actions">
-                    <button class="btn btn-light" type="button" data-add-column>Add column</button>
+                <div class="mini-actions inline">
+                    <button class="btn btn-primary" type="button" data-add-column>Add column</button>
                     <button class="btn btn-danger" type="button" data-delete-table>Delete table</button>
                 </div>
             </div>
-            <div class="editor-section">
-                <h3>Columns</h3>
-                <div class="inspector-column-list">
-                    ${table.columns.map(col => `
-                        <button class="inspector-column ${col.id === state.selectedColumnId ? 'active' : ''}" type="button" data-select-column="${table.id}:${col.id}">
-                            <span>${escapeHtml(col.name)}</span><small>${escapeHtml(col.sqlType)}</small>
-                        </button>
-                    `).join('') || '<p class="muted">No columns yet.</p>'}
+        `;
+
+        const columnsPane = `
+            <div class="columns-panel">
+                <div class="panel-mini-heading">
+                    <div>
+                        <h3>Columns</h3>
+                        <p class="muted">Manage table fields.</p>
+                    </div>
+                    <button class="chip-button chip-blue" type="button" data-add-column>+ Add</button>
+                </div>
+                <input class="text-input column-search" placeholder="Search columns" />
+                <div class="property-column-list">${columnCards || '<p class="muted">No columns yet.</p>'}</div>
+            </div>
+        `;
+
+        const relationsPane = `
+            <div class="relations-panel">
+                <h3>Relations</h3>
+                <p class="muted">Foreign keys and relation creation.</p>
+                <div class="relation-list">${relationCards || '<div class="empty-list">No current relations.</div>'}</div>
+                ${column ? `
+                    <div class="create-relation-box">
+                        <strong>Create relation</strong>
+                        <p class="muted">Pick target table and target column for selected field.</p>
+                        <select class="text-input" data-edit-fk-table>${fkTableOptions}</select>
+                        <select class="text-input" data-edit-fk-column>${fkColumnOptions}</select>
+                        <button class="btn btn-primary wide" type="button">Create relation</button>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+
+        const activePane = state.propertyTab === 'relations'
+            ? relationsPane
+            : state.propertyTab === 'overview'
+                ? overviewPane
+                : columnsPane;
+
+        elements.inspectorContent.innerHTML = `
+            <div class="property-summary">
+                <h2>${escapeHtml(table.name)}</h2>
+                <p>Inline table editor.</p>
+                <div class="property-pills">
+                    <span>Cols: ${table.columns.length}</span>
+                    <span>Rels: ${relationCountForTable(table)}</span>
+                    <span>API: ${apiReadyCount(table)}</span>
                 </div>
             </div>
-            ${column ? `
-            <div class="editor-section">
-                <h3>Column detail</h3>
-                <label class="field-label">Column name</label>
-                <input class="text-input" data-edit-column-name value="${escapeHtml(column.name)}" />
-                <label class="field-label">SQL Server type</label>
-                <input class="text-input" data-edit-column-type value="${escapeHtml(column.sqlType)}" />
-                <div class="check-grid">
-                    <label><input type="checkbox" data-edit-pk ${column.isPrimaryKey ? 'checked' : ''} /> Primary key</label>
-                    <label><input type="checkbox" data-edit-nullable ${column.isNullable ? 'checked' : ''} ${column.isPrimaryKey ? 'disabled' : ''} /> Nullable</label>
-                    <label><input type="checkbox" data-edit-unique ${column.isUnique ? 'checked' : ''} /> Unique</label>
-                </div>
-                <label class="field-label">Relationship target table</label>
-                <select class="text-input" data-edit-fk-table>${fkTableOptions}</select>
-                <label class="field-label">Target column</label>
-                <select class="text-input" data-edit-fk-column>${fkColumnOptions}</select>
-                <button class="btn btn-danger wide" type="button" data-delete-column>Delete column</button>
-            </div>` : ''}
+            ${renderPropertyTabs()}
+            ${activePane}
         `;
     }
 
     function autoLayout() {
-        const roots = [...state.schema.tables].sort((a, b) => inboundCount(a) - inboundCount(b));
-        roots.forEach((table, index) => {
-            table.x = 80 + (index % 3) * 390;
-            table.y = 80 + Math.floor(index / 3) * 330;
+        if (state.schema.tables.length === 0) return;
+
+        const tables = state.schema.tables;
+        const tableMap = new Map(tables.map(t => [t.name.toLowerCase(), t]));
+        
+        // Khởi tạo tầng mặc định cho mọi bảng
+        const layers = new Map();
+        tables.forEach(t => layers.set(t.id, 0));
+
+        // Dùng thuật toán DFS tính toán tầng phụ thuộc (depth of dependencies)
+        const visited = new Set();
+        const path = new Set();
+
+        function calculateLayer(table) {
+            if (path.has(table.id)) {
+                return layers.get(table.id); // Phát hiện chu kỳ, dùng giá trị hiện tại
+            }
+            if (visited.has(table.id)) {
+                return layers.get(table.id);
+            }
+
+            path.add(table.id);
+            let maxParentLayer = -1;
+
+            table.columns.forEach(col => {
+                if (col.foreignKeyTable) {
+                    const parentTable = tableMap.get(col.foreignKeyTable.toLowerCase());
+                    if (parentTable && parentTable.id !== table.id) {
+                        const parentLayer = calculateLayer(parentTable);
+                        maxParentLayer = Math.max(maxParentLayer, parentLayer);
+                    }
+                }
+            });
+
+            path.delete(table.id);
+            visited.add(table.id);
+
+            const computedLayer = maxParentLayer + 1;
+            layers.set(table.id, computedLayer);
+            return computedLayer;
+        }
+
+        tables.forEach(table => calculateLayer(table));
+
+        // Nhóm các bảng theo tầng
+        const layerGroups = new Map();
+        tables.forEach(table => {
+            const layer = layers.get(table.id) || 0;
+            if (!layerGroups.has(layer)) {
+                layerGroups.set(layer, []);
+            }
+            layerGroups.get(layer).push(table);
         });
+
+        // Bố trí tọa độ
+        const sortedLayerKeys = Array.from(layerGroups.keys()).sort((a, b) => a - b);
+        const startX = 85;
+        const startY = 55;
+        const colWidth = 360; // Khoảng cách cột đủ rộng cho đường nối Bezier
+        const rowGap = 40;    // Khoảng cách tối thiểu giữa các bảng cùng cột
+
+        sortedLayerKeys.forEach((layerKey, colIndex) => {
+            const group = layerGroups.get(layerKey) || [];
+            let currentY = startY;
+            const x = startX + colIndex * colWidth;
+
+            group.forEach(table => {
+                table.x = x;
+                table.y = currentY;
+                currentY += tableHeight(table) + rowGap;
+            });
+        });
+
+        // Giới hạn trong vùng canvasViewport
+        tables.forEach(table => {
+            table.x = Math.max(24, Math.min(canvasSize.width - tableWidth - 24, table.x));
+            table.y = Math.max(24, Math.min(canvasSize.height - tableHeight(table) - 24, table.y));
+        });
+
         render();
+        scheduleSchemaBroadcast();
     }
 
     function inboundCount(table) {
@@ -401,14 +1130,16 @@
         const table = {
             id: uid(),
             name: `new_table_${next}`,
-            x: 80 + ((next - 1) % 3) * 390,
-            y: 80 + Math.floor((next - 1) / 3) * 330,
+            lastValidName: `new_table_${next}`,
+            x: 85 + ((next - 1) % 3) * 330,
+            y: 55 + Math.floor((next - 1) / 3) * 220,
             columns: [{ id: uid(), name: 'id', sqlType: 'int', isPrimaryKey: true, isNullable: false, isUnique: false, foreignKeyTable: '', foreignKeyColumn: '', order: 0 }]
         };
         state.schema.tables.push(table);
         state.selectedTableId = table.id;
         state.selectedColumnId = table.columns[0].id;
         render();
+        scheduleSchemaBroadcast();
     }
 
     function addColumn(table) {
@@ -426,9 +1157,273 @@
         table.columns.push(column);
         state.selectedColumnId = column.id;
         render();
+        scheduleSchemaBroadcast();
     }
 
-    async function importSql() {
+    function stripSqlComments(sql) {
+        return String(sql || '')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/(--|#).*?$/gm, '');
+    }
+
+    function findMatchingParenthesis(text, openIndex) {
+        let depth = 0;
+        let quote = null;
+        let inBracket = false;
+        for (let index = openIndex; index < text.length; index++) {
+            const character = text[index];
+            if (inBracket) {
+                if (character === ']') inBracket = false;
+                continue;
+            }
+            if (quote) {
+                if (character === quote) quote = null;
+                continue;
+            }
+            if (character === '[') {
+                inBracket = true;
+                continue;
+            }
+            if (character === '\'' || character === '"' || character === '`') {
+                quote = character;
+                continue;
+            }
+            if (character === '(') depth++;
+            if (character === ')') {
+                depth--;
+                if (depth === 0) return index;
+            }
+        }
+        return -1;
+    }
+
+    function splitTopLevel(text, separator) {
+        const parts = [];
+        let value = '';
+        let depth = 0;
+        let quote = null;
+        let inBracket = false;
+        for (const character of text) {
+            if (inBracket) {
+                value += character;
+                if (character === ']') inBracket = false;
+                continue;
+            }
+            if (quote) {
+                value += character;
+                if (character === quote) quote = null;
+                continue;
+            }
+            if (character === '[') {
+                inBracket = true;
+                value += character;
+                continue;
+            }
+            if (character === '\'' || character === '"' || character === '`') {
+                quote = character;
+                value += character;
+                continue;
+            }
+            if (character === '(') depth++;
+            if (character === ')' && depth > 0) depth--;
+            if (character === separator && depth === 0) {
+                parts.push(value);
+                value = '';
+            } else {
+                value += character;
+            }
+        }
+        if (value.trim()) parts.push(value);
+        return parts;
+    }
+
+    function normalizeSqlIdentifier(identifier) {
+        let value = String(identifier || '').trim().replace(/;$/, '').trim();
+        if ((value.startsWith('[') && value.endsWith(']')) ||
+            (value.startsWith('"') && value.endsWith('"')) ||
+            (value.startsWith('`') && value.endsWith('`'))) {
+            value = value.slice(1, -1);
+        }
+        return value.trim();
+    }
+
+    function lastIdentifierPart(identifier) {
+        const parts = splitTopLevel(identifier, '.').map(normalizeSqlIdentifier).filter(Boolean);
+        return parts.at(-1) || normalizeSqlIdentifier(identifier);
+    }
+
+    function readIdentifierToken(text, startIndex = 0) {
+        let cursor = startIndex;
+        while (cursor < text.length && /\s/.test(text[cursor])) cursor++;
+        if (cursor >= text.length) return { token: '', end: cursor };
+        const first = text[cursor];
+        if (first === '[') {
+            const close = text.indexOf(']', cursor + 1);
+            if (close >= 0) return { token: text.slice(cursor, close + 1), end: close + 1 };
+        }
+        if (first === '"' || first === '`') {
+            const close = text.indexOf(first, cursor + 1);
+            if (close >= 0) return { token: text.slice(cursor, close + 1), end: close + 1 };
+        }
+        const start = cursor;
+        while (cursor < text.length && !/[\s(),;]/.test(text[cursor])) cursor++;
+        return { token: text.slice(start, cursor), end: cursor };
+    }
+
+    function readColumnsFromParentheses(text) {
+        const open = text.indexOf('(');
+        if (open < 0) return [];
+        const close = findMatchingParenthesis(text, open);
+        if (close <= open) return [];
+        return splitTopLevel(text.slice(open + 1, close), ',')
+            .map(column => lastIdentifierPart(column.trim()))
+            .filter(Boolean);
+    }
+
+    function stripConstraintName(definition) {
+        const trimmed = definition.trim();
+        if (!/^CONSTRAINT\b/i.test(trimmed)) return definition;
+        const name = readIdentifierToken(trimmed, 'CONSTRAINT'.length);
+        return trimmed.slice(name.end).trim();
+    }
+
+    function parseClientColumnDefinition(definition, order) {
+        const name = readIdentifierToken(definition, 0);
+        if (!name.token) return null;
+        const rest = definition.slice(name.end).trim();
+        const typeStopWords = new Set(['CONSTRAINT', 'PRIMARY', 'FOREIGN', 'REFERENCES', 'UNIQUE', 'NULL', 'NOT', 'DEFAULT', 'CHECK', 'COLLATE', 'GENERATED', 'IDENTITY', 'AUTO_INCREMENT', 'COMMENT', 'ON']);
+        const typeTokens = splitTopLevel(rest, ' ').map(token => token.trim()).filter(Boolean);
+        const sqlType = [];
+        for (const token of typeTokens) {
+            const keyword = token.toUpperCase();
+            if (typeStopWords.has(keyword) || (keyword === 'KEY' && sqlType.at(-1)?.toUpperCase() === 'PRIMARY')) break;
+            sqlType.push(token);
+        }
+        const references = rest.match(/\bREFERENCES\s+([a-zA-Z0-9_`"\[\]\.]+)(?:\s*\(([^)]+)\))?/i);
+        return {
+            id: uid(),
+            name: lastIdentifierPart(name.token),
+            sqlType: sqlType.join(' ').replace(/\s+/g, ' ') || 'nvarchar(255)',
+            isPrimaryKey: /\bPRIMARY\s+KEY\b/i.test(rest),
+            isNullable: !/\bNOT\s+NULL\b/i.test(rest) && !/\bPRIMARY\s+KEY\b/i.test(rest),
+            isUnique: /\bUNIQUE\b/i.test(rest),
+            foreignKeyTable: references ? lastIdentifierPart(references[1]) : '',
+            foreignKeyColumn: references?.[2] ? lastIdentifierPart(references[2]) : (references ? 'id' : ''),
+            order
+        };
+    }
+
+    function parseClientTableForeignKey(definition) {
+        const localColumns = readColumnsFromParentheses(definition);
+        const reference = definition.match(/\bREFERENCES\s+([a-zA-Z0-9_`"\[\]\.]+)([\s\S]*)/i);
+        if (!reference) return null;
+        const targetColumns = readColumnsFromParentheses(reference[2] || '');
+        return {
+            localColumns,
+            targetTable: lastIdentifierPart(reference[1]),
+            targetColumns: targetColumns.length ? targetColumns : ['id']
+        };
+    }
+
+    function parseSqlToTables(sqlText) {
+        const cleaned = stripSqlComments(sqlText);
+        const tables = [];
+        const createTableRegex = /\bCREATE\s+TABLE\b/gi;
+        let match;
+        while ((match = createTableRegex.exec(cleaned)) !== null) {
+            let cursor = match.index + match[0].length;
+            while (cursor < cleaned.length && /\s/.test(cleaned[cursor])) cursor++;
+            if (cleaned.slice(cursor).toUpperCase().startsWith('IF NOT EXISTS')) {
+                cursor += 'IF NOT EXISTS'.length;
+            }
+            const name = readIdentifierToken(cleaned, cursor);
+            cursor = name.end;
+            while (cursor < cleaned.length && /\s/.test(cleaned[cursor])) cursor++;
+            if (!name.token || cleaned[cursor] !== '(') continue;
+            const close = findMatchingParenthesis(cleaned, cursor);
+            if (close <= cursor) continue;
+
+            const table = {
+                id: uid(),
+                name: lastIdentifierPart(name.token),
+                lastValidName: lastIdentifierPart(name.token),
+                x: 0,
+                y: 0,
+                columns: []
+            };
+            const primaryKeys = [];
+            const foreignKeys = [];
+            const uniqueColumns = [];
+            let order = 0;
+
+            for (const rawDefinition of splitTopLevel(cleaned.slice(cursor + 1, close), ',')) {
+                const definition = stripConstraintName(rawDefinition).trim();
+                if (!definition) continue;
+                if (/^PRIMARY\b/i.test(definition)) {
+                    primaryKeys.push(...readColumnsFromParentheses(definition));
+                    continue;
+                }
+                if (/^FOREIGN\b/i.test(definition)) {
+                    const key = parseClientTableForeignKey(definition);
+                    if (key) foreignKeys.push(key);
+                    continue;
+                }
+                if (/^UNIQUE\b/i.test(definition)) {
+                    uniqueColumns.push(...readColumnsFromParentheses(definition));
+                    continue;
+                }
+                if (/^(CHECK|KEY)\b/i.test(definition)) continue;
+                const column = parseClientColumnDefinition(definition, order++);
+                if (column) table.columns.push(column);
+            }
+
+            for (const keyName of primaryKeys) {
+                const column = table.columns.find(candidate => candidate.name.toLowerCase() === keyName.toLowerCase());
+                if (column) {
+                    column.isPrimaryKey = true;
+                    column.isNullable = false;
+                }
+            }
+            for (const columnName of uniqueColumns) {
+                const column = table.columns.find(candidate => candidate.name.toLowerCase() === columnName.toLowerCase());
+                if (column) column.isUnique = true;
+            }
+            for (const key of foreignKeys) {
+                key.localColumns.forEach((columnName, index) => {
+                    const column = table.columns.find(candidate => candidate.name.toLowerCase() === columnName.toLowerCase());
+                    if (column) {
+                        column.foreignKeyTable = key.targetTable;
+                        column.foreignKeyColumn = key.targetColumns[index] || 'id';
+                    }
+                });
+            }
+            if (table.columns.length) tables.push(table);
+            createTableRegex.lastIndex = close + 1;
+        }
+        return tables;
+    }
+
+    function mergeImportedTables(tables) {
+        for (const table of tables) {
+            const baseName = table.name || 'table';
+            let uniqueName = baseName;
+            let suffix = 1;
+            while (state.schema.tables.some(existing => existing.name.toLowerCase() === uniqueName.toLowerCase())) {
+                uniqueName = `${baseName}_${suffix++}`;
+            }
+            table.name = uniqueName;
+            table.lastValidName = uniqueName;
+            state.schema.tables.push(table);
+        }
+        if (tables.length) {
+            state.selectedTableId = tables[0].id;
+            state.selectedColumnId = tables[0].columns[0]?.id || null;
+        }
+    }
+
+    async function executeImport(mode) {
+        elements.importConfirmOverlay.hidden = true;
+        elements.sqlImportOverlay.hidden = true;
         const sql = elements.sqlInput.value.trim();
         if (!sql) {
             showToast('Paste SQL before importing.');
@@ -443,15 +1438,56 @@
                 body: JSON.stringify({ sql, projectName: elements.projectName.value })
             });
             if (!response.ok) throw new Error('Import failed');
-            normalizeSchema(await response.json());
-            state.selectedTableId = state.schema.tables[0]?.id || null;
-            state.selectedColumnId = state.schema.tables[0]?.columns[0]?.id || null;
-            render();
-            showToast(`Imported ${state.schema.tables.length} tables.`);
+            const importedSchema = await response.json();
+            const importedTables = importedSchema.tables || [];
+
+            if (importedTables.length === 0) {
+                showToast('No tables found in the provided SQL.');
+                return;
+            }
+
+            if (mode === 'overwrite') {
+                normalizeSchema(importedSchema);
+            } else {
+                mergeImportedTables(importedTables);
+            }
+
+            autoLayout();
+            showToast(mode === 'overwrite'
+                ? `Imported and overwrote schema with ${importedTables.length} tables.`
+                : `Merged ${importedTables.length} new tables into schema.`);
         } catch (error) {
-            showToast(error.message || 'Import failed.');
+            const parsedTables = parseSqlToTables(sql);
+            if (!parsedTables.length) {
+                showToast(error.message || 'Import failed.');
+            } else {
+                if (mode === 'overwrite') {
+                    state.schema.tables = [];
+                }
+                mergeImportedTables(parsedTables);
+                autoLayout();
+                showToast(mode === 'overwrite'
+                    ? `Imported and overwrote schema with ${parsedTables.length} tables (local SQL parser).`
+                    : `Merged ${parsedTables.length} new tables into schema (local SQL parser).`);
+            }
         } finally {
             elements.importSqlBtn.disabled = false;
+        }
+    }
+
+    function importSql() {
+        const sql = elements.sqlInput.value.trim();
+        if (!sql) {
+            showToast('Paste SQL before importing.');
+            openSqlImport();
+            return;
+        }
+
+        if (state.schema.tables.length === 0) {
+            executeImport('overwrite');
+        } else {
+            elements.sqlImportOverlay.hidden = true;
+            elements.importConfirmOverlay.hidden = false;
         }
     }
 
@@ -488,33 +1524,98 @@
 
     function showReview(result) {
         const issues = result.issues || [];
+        const fixableCount = issues.filter(issue => issue.canAutoFix).length;
+        state.lastReviewResult = result;
         elements.reviewTitle.textContent = result.summary || 'Database review completed';
         elements.reviewSource.textContent = result.source || 'Database links only';
         elements.issueTotal.textContent = issues.length;
         elements.issueHigh.textContent = result.highCount ?? issues.filter(i => String(i.severity).toUpperCase() === 'HIGH').length;
         elements.issueMedium.textContent = result.mediumCount ?? issues.filter(i => String(i.severity).toUpperCase() === 'MEDIUM').length;
         elements.issueLow.textContent = result.lowCount ?? issues.filter(i => String(i.severity).toUpperCase() === 'LOW').length;
+        elements.fixAllReviewBtn.hidden = fixableCount === 0;
+        elements.fixAllReviewBtn.disabled = fixableCount === 0 || state.fixingReview;
+        elements.fixAllReviewBtn.textContent = `Fix all (${fixableCount})`;
         elements.reviewIssues.innerHTML = issues.length === 0
             ? '<div class="review-empty"><strong>Looks clean.</strong><span>No database relationship issue was found.</span></div>'
-            : issues.map(issue => `
+            : issues.map((issue, index) => `
                 <article class="issue-card ${String(issue.severity || '').toLowerCase()}">
-                    <div><span>${escapeHtml(issue.severity || 'LOW')}</span><strong>${escapeHtml(issue.type || 'ISSUE')}</strong></div>
+                    <div class="issue-card-header">
+                        <div><span>${escapeHtml(issue.severity || 'LOW')}</span><strong>${escapeHtml(issue.type || 'ISSUE')}</strong></div>
+                        ${issue.canAutoFix ? `<button class="btn btn-light issue-fix-btn" type="button" data-fix-issue="${index}">Fix issue</button>` : ''}
+                    </div>
                     <p>${escapeHtml(issue.message || '')}</p>
                     <small>${escapeHtml(issue.suggestion || '')}</small>
+                    ${issue.canAutoFix && issue.fixAction ? `<em class="issue-fix-note">${escapeHtml(issue.fixAction)}</em>` : ''}
                 </article>
             `).join('');
         elements.reviewOverlay.hidden = false;
     }
 
-    async function exportProject() {
+    async function applyReviewFix(issueIndex = null, fixAll = false) {
+        const issues = state.lastReviewResult?.issues || [];
+        const issue = fixAll ? null : issues[issueIndex];
+        if (!fixAll && !issue) {
+            showToast('Select an issue to fix.');
+            return;
+        }
+
+        state.fixingReview = true;
+        elements.fixAllReviewBtn.disabled = true;
+        elements.reviewIssues.querySelectorAll('button').forEach(button => button.disabled = true);
+
+        try {
+            const response = await fetch('/DatabaseDesigner/FixReview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ schema: state.schema, issue, fixAll })
+            });
+            if (!response.ok) throw new Error('Automatic fix failed');
+            const result = await response.json();
+            normalizeSchema(result.schema || state.schema);
+            render();
+            scheduleSchemaBroadcast();
+            state.fixingReview = false;
+            showReview(result.review || { issues: [] });
+            showToast(result.message || 'Automatic fix applied.');
+        } catch (error) {
+            showToast(error.message || 'Automatic fix failed.');
+        } finally {
+            state.fixingReview = false;
+            const fixableCount = (state.lastReviewResult?.issues || []).filter(item => item.canAutoFix).length;
+            elements.fixAllReviewBtn.disabled = fixableCount === 0;
+            elements.reviewIssues.querySelectorAll('button').forEach(button => button.disabled = false);
+        }
+    }
+
+    async function openExportModal() {
         if (state.schema.tables.length === 0) {
             showToast('Add or import tables before exporting.');
             return;
         }
+        elements.exportConfigOverlay.hidden = false;
+    }
 
-        const topBtn = document.getElementById('topExportBtn');
-        elements.exportBtn.disabled = true;
-        if (topBtn) topBtn.disabled = true;
+    async function exportProject() {
+        let connectionString = '';
+        const mode = document.querySelector('input[name="exportMode"]:checked').value;
+        const projectName = state.schema.projectName || 'GeneratedMvcApp';
+
+        if (mode === 'local') {
+            const serverName = elements.localServerName.value.trim() || 'localhost';
+            connectionString = `Server=${serverName};Database=${projectName}Db;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true`;
+        } else if (mode === 'live') {
+            const serverName = elements.liveServerName.value.trim();
+            const login = elements.liveLogin.value.trim();
+            const password = elements.livePassword.value.trim();
+            connectionString = `Server=${serverName};Database=${projectName}Db;User Id=${login};Password=${password};TrustServerCertificate=True;MultipleActiveResultSets=true`;
+        } else if (mode === 'preconfig') {
+            connectionString = `Server=103.72.56.55,2025;Database=${projectName}Db;User Id=sa;Password=!Pass123;TrustServerCertificate=True;MultipleActiveResultSets=true`;
+        }
+
+        state.schema.connectionString = connectionString;
+
+        elements.exportConfirmBtn.disabled = true;
+        elements.exportConfirmBtn.textContent = 'Exporting...';
         try {
             const response = await fetch('/DatabaseDesigner/Export', {
                 method: 'POST',
@@ -526,21 +1627,57 @@
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `${state.schema.projectName || 'GeneratedMvcApp'}-aspnet-mvc-sqlserver.zip`;
+            link.download = `${projectName}-aspnet-mvc-sqlserver.zip`;
             document.body.appendChild(link);
             link.click();
             link.remove();
             URL.revokeObjectURL(url);
             showToast('Exported ASP.NET Core MVC + SQL Server source.');
+            elements.exportConfigOverlay.hidden = true;
         } catch (error) {
             showToast(error.message || 'Export failed.');
         } finally {
-            elements.exportBtn.disabled = false;
-            if (topBtn) topBtn.disabled = false;
+            elements.exportConfirmBtn.disabled = false;
+            elements.exportConfirmBtn.textContent = 'Export';
         }
     }
 
     document.addEventListener('click', event => {
+        const fixButton = event.target.closest('[data-fix-issue]');
+        if (fixButton) {
+            applyReviewFix(Number(fixButton.dataset.fixIssue), false);
+            return;
+        }
+
+        const sideModeButton = event.target.closest('[data-side-mode]');
+        if (sideModeButton) {
+            state.sideMode = sideModeButton.dataset.sideMode;
+            render();
+            return;
+        }
+
+        const propertyTabButton = event.target.closest('[data-prop-tab]');
+        if (propertyTabButton) {
+            setPropertyTab(propertyTabButton.dataset.propTab);
+            return;
+        }
+
+        if (event.target.closest('[data-add-table]')) {
+            addTable();
+            return;
+        }
+
+        const clearFkButton = event.target.closest('[data-clear-fk]');
+        if (clearFkButton) {
+            const { column } = findColumnById(clearFkButton.dataset.clearFk);
+            if (!column) return;
+            column.foreignKeyTable = '';
+            column.foreignKeyColumn = '';
+            render();
+            scheduleSchemaBroadcast();
+            return;
+        }
+
         const tableButton = event.target.closest('[data-select-table]');
         if (tableButton) {
             state.selectedTableId = tableButton.dataset.selectTable;
@@ -565,73 +1702,111 @@
         }
 
         if (event.target.closest('[data-delete-table]')) {
-            const table = selectedTable();
-            if (!table) return;
-            state.schema.tables = state.schema.tables.filter(candidate => candidate.id !== table.id);
-            state.schema.tables.forEach(candidate => candidate.columns.forEach(column => {
-                if (column.foreignKeyTable === table.name) {
-                    column.foreignKeyTable = '';
-                    column.foreignKeyColumn = '';
-                }
-            }));
-            state.selectedTableId = state.schema.tables[0]?.id || null;
-            state.selectedColumnId = state.schema.tables[0]?.columns[0]?.id || null;
-            render();
+            deleteSelectedTable();
             return;
         }
 
-        if (event.target.closest('[data-delete-column]')) {
+        const deleteColumnButton = event.target.closest('[data-delete-column]');
+        if (deleteColumnButton) {
             const table = selectedTable();
-            const column = selectedColumn();
+            const columnId = deleteColumnButton.dataset.deleteColumn || state.selectedColumnId;
+            const column = table?.columns.find(candidate => candidate.id === columnId);
             if (!table || !column) return;
             table.columns = table.columns.filter(candidate => candidate.id !== column.id);
             state.selectedColumnId = table.columns[0]?.id || null;
+            render();
+            scheduleSchemaBroadcast();
+            return;
+        }
+
+        // Bấm chọn bảng khi click vào bất kỳ vị trí nào trên bảng
+        const tableCard = event.target.closest('.schema-table');
+        if (tableCard) {
+            const tableId = tableCard.dataset.tableId;
+            if (state.selectedTableId !== tableId) {
+                state.selectedTableId = tableId;
+                const table = selectedTable();
+                if (table && (!state.selectedColumnId || !table.columns.some(c => c.id === state.selectedColumnId))) {
+                    state.selectedColumnId = table.columns[0]?.id || null;
+                }
+                render();
+            }
+            return;
+        }
+
+        // Bỏ chọn khi click vào khoảng trống của canvas
+        const isCanvasViewport = event.target.closest('#canvasViewport') || event.target.id === 'canvasViewport';
+        const isControlPanel = event.target.closest('.control-panel') || event.target.closest('.diagram-header') || event.target.closest('.review-overlay') || event.target.closest('.review-dialog');
+        if (isCanvasViewport && !isControlPanel) {
+            state.selectedTableId = null;
+            state.selectedColumnId = null;
             render();
         }
     });
 
     document.addEventListener('input', event => {
         const table = selectedTable();
-        const column = selectedColumn();
 
         if (event.target.matches('[data-edit-table-name]') && table) {
             const oldName = table.name;
-            table.name = event.target.value;
-            state.schema.tables.forEach(candidate => candidate.columns.forEach(col => {
-                if (col.foreignKeyTable === oldName) col.foreignKeyTable = table.name;
-            }));
+            const oldReferenceName = oldName || table.lastValidName || '';
+            const newName = event.target.value;
+            table.name = newName;
+            if (newName.trim()) {
+                if (oldReferenceName.trim()) {
+                    state.schema.tables.forEach(candidate => candidate.columns.forEach(col => {
+                        if (col.foreignKeyTable === oldReferenceName) col.foreignKeyTable = newName;
+                    }));
+                }
+                table.lastValidName = newName;
+            }
             render();
+            scheduleSchemaBroadcast();
         }
 
-        if (event.target.matches('[data-edit-column-name]') && column) {
+        if (event.target === elements.tableSearchInput) {
+            state.tableSearch = event.target.value;
+            renderTableList();
+        }
+
+        if (event.target.matches('[data-edit-column-name]')) {
+            const { column } = findColumnById(event.target.dataset.columnId || state.selectedColumnId);
+            if (!column) return;
             column.name = event.target.value;
             render();
+            scheduleSchemaBroadcast();
         }
 
-        if (event.target.matches('[data-edit-column-type]') && column) {
+        if (event.target.matches('[data-edit-column-type]')) {
+            const { column } = findColumnById(event.target.dataset.columnId || state.selectedColumnId);
+            if (!column) return;
             column.sqlType = event.target.value;
             render();
+            scheduleSchemaBroadcast();
         }
     });
 
     document.addEventListener('change', event => {
-        const column = selectedColumn();
+        const { column } = findColumnById(event.target.dataset.columnId || state.selectedColumnId);
         if (!column) return;
 
         if (event.target.matches('[data-edit-pk]')) {
             column.isPrimaryKey = event.target.checked;
             if (column.isPrimaryKey) column.isNullable = false;
             render();
+            scheduleSchemaBroadcast();
         }
 
         if (event.target.matches('[data-edit-nullable]')) {
             column.isNullable = event.target.checked;
             render();
+            scheduleSchemaBroadcast();
         }
 
         if (event.target.matches('[data-edit-unique]')) {
             column.isUnique = event.target.checked;
             render();
+            scheduleSchemaBroadcast();
         }
 
         if (event.target.matches('[data-edit-fk-table]')) {
@@ -639,11 +1814,13 @@
             const targetTable = state.schema.tables.find(table => table.name === column.foreignKeyTable);
             column.foreignKeyColumn = targetTable?.columns.find(col => col.isPrimaryKey)?.name || targetTable?.columns[0]?.name || '';
             render();
+            scheduleSchemaBroadcast();
         }
 
         if (event.target.matches('[data-edit-fk-column]')) {
             column.foreignKeyColumn = event.target.value;
             render();
+            scheduleSchemaBroadcast();
         }
     });
 
@@ -667,27 +1844,56 @@
     document.addEventListener('pointermove', event => {
         if (!state.dragging) return;
         const drag = state.dragging;
-        drag.table.x = Math.max(24, Math.min(canvasSize.width - tableWidth - 24, drag.originX + event.clientX - drag.startX));
-        drag.table.y = Math.max(24, Math.min(canvasSize.height - 180, drag.originY + event.clientY - drag.startY));
+        drag.table.x = Math.max(24, Math.min(canvasSize.width - tableWidth - 24, drag.originX + (event.clientX - drag.startX) / state.zoom));
+        drag.table.y = Math.max(24, Math.min(canvasSize.height - 180, drag.originY + (event.clientY - drag.startY) / state.zoom));
         renderCanvasTables();
         renderRelations();
+        scheduleSchemaBroadcast(90);
     });
 
     document.addEventListener('pointerup', () => {
+        if (state.dragging) {
+            scheduleSchemaBroadcast(0);
+        }
         state.dragging = null;
     });
 
     elements.projectName.addEventListener('input', render);
+    elements.openSqlModalBtn.addEventListener('click', openSqlImport);
+    elements.closeSqlImportBtn.addEventListener('click', closeSqlImport);
     elements.importSqlBtn.addEventListener('click', importSql);
+    elements.importOverwriteBtn.addEventListener('click', () => executeImport('overwrite'));
+    elements.importMergeBtn.addEventListener('click', () => executeImport('merge'));
+    elements.importCancelBtn.addEventListener('click', () => {
+        elements.importConfirmOverlay.hidden = true;
+    });
     elements.addTableBtn.addEventListener('click', addTable);
-    elements.autoLayoutBtn.addEventListener('click', autoLayout);
+    elements.deleteAllTablesBtn.addEventListener('click', deleteAllTables);
     elements.reviewBtn.addEventListener('click', reviewSchema);
-    elements.exportBtn.addEventListener('click', exportProject);
-    document.getElementById('topExportBtn')?.addEventListener('click', exportProject);
+    elements.fixAllReviewBtn.addEventListener('click', () => applyReviewFix(null, true));
+    elements.autoLayoutBtn.addEventListener('click', autoLayout);
+    elements.exportBtn.addEventListener('click', openExportModal);
+    if (elements.topExportBtn) {
+        elements.topExportBtn.addEventListener('click', openExportModal);
+    }
+    elements.exportConfirmBtn.addEventListener('click', exportProject);
+    elements.exportCancelBtn.addEventListener('click', () => {
+        elements.exportConfigOverlay.hidden = true;
+    });
     elements.closeReviewBtn.addEventListener('click', () => elements.reviewOverlay.hidden = true);
+    elements.zoomOutBtn.addEventListener('click', () => setZoom(state.zoom - zoomStep));
+    elements.zoomInBtn.addEventListener('click', () => setZoom(state.zoom + zoomStep));
+    elements.fitViewBtn.addEventListener('click', fitView);
+    elements.canvasViewport.addEventListener('wheel', event => {
+        if (!event.ctrlKey) return;
+        event.preventDefault();
+        setZoom(state.zoom + (event.deltaY < 0 ? zoomStep : -zoomStep), { x: event.clientX, y: event.clientY });
+    }, { passive: false });
+    elements.canvasViewport.addEventListener('mousemove', broadcastCursor);
 
-    normalizeSchema(state.schema);
+    normalizeSchema(initialSchema);
     render();
+    startCollaboration();
 })();
 </script>
 }
