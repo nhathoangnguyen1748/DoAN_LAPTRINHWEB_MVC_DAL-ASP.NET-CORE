@@ -1,0 +1,293 @@
+[
+  {
+    "id": "41ce83808a0945e2b8b657f6f9e360af",
+    "name": "webchoigame",
+    "ownerEmail": "nguoiyeucu0305@gmail.com",
+    "collaboratorEmails": [],
+    "schema": {
+      "projectName": "webchoigame",
+      "tables": [
+        {
+          "id": "2ba1ddcc70594d6692b8c0e4f506e6a0",
+          "name": "test_users",
+          "lastValidName": "test_users",
+          "x": 85,
+          "y": 55,
+          "columns": [
+            {
+              "id": "26e72f68d5824f67a06b820ade7a1ed7",
+              "name": "user_id",
+              "sqlType": "INT",
+              "isPrimaryKey": true,
+              "isNullable": false,
+              "isUnique": false,
+              "foreignKeyTable": "",
+              "foreignKeyColumn": "",
+              "order": 0
+            },
+            {
+              "id": "335a1a74f9bc45beae52d2786e08af54",
+              "name": "fullname",
+              "sqlType": "VARCHAR(100)",
+              "isPrimaryKey": false,
+              "isNullable": false,
+              "isUnique": false,
+              "foreignKeyTable": "",
+              "foreignKeyColumn": "",
+              "order": 1
+            },
+            {
+              "id": "d312f1fbb11c48b382687fb869ec72db",
+              "name": "email",
+              "sqlType": "VARCHAR(100)",
+              "isPrimaryKey": false,
+              "isNullable": false,
+              "isUnique": true,
+              "foreignKeyTable": "",
+              "foreignKeyColumn": "",
+              "order": 2
+            },
+            {
+              "id": "ab5688b7b51642b39083261462810873",
+              "name": "status",
+              "sqlType": "TINYINT",
+              "isPrimaryKey": false,
+              "isNullable": true,
+              "isUnique": false,
+              "foreignKeyTable": "",
+              "foreignKeyColumn": "",
+              "order": 3
+            }
+          ]
+        },
+        {
+          "id": "c30e0d663cd64116b556e07a62d6c473",
+          "name": "test_categories",
+          "lastValidName": "test_categories",
+          "x": 85,
+          "y": 261,
+          "columns": [
+            {
+              "id": "2d299ec648f042aab827251dc61cf9c6",
+              "name": "category_id",
+              "sqlType": "INT",
+              "isPrimaryKey": true,
+              "isNullable": false,
+              "isUnique": false,
+              "foreignKeyTable": "",
+              "foreignKeyColumn": "",
+              "order": 0
+            },
+            {
+              "id": "c5d816104a964760bda118eb17f5726c",
+              "name": "category_name",
+              "sqlType": "VARCHAR(100)",
+              "isPrimaryKey": false,
+              "isNullable": false,
+              "isUnique": false,
+              "foreignKeyTable": "",
+              "foreignKeyColumn": "",
+              "order": 1
+            },
+            {
+              "id": "5acecfa42e074b358bcd829bf8bb6d80",
+              "name": "slug",
+              "sqlType": "VARCHAR(100)",
+              "isPrimaryKey": false,
+              "isNullable": false,
+              "isUnique": true,
+              "foreignKeyTable": "",
+              "foreignKeyColumn": "",
+              "order": 2
+            }
+          ]
+        },
+        {
+          "id": "66543f0a8fef48d4a1822c20432ad85d",
+          "name": "test_courses",
+          "lastValidName": "test_courses",
+          "x": 445,
+          "y": 55,
+          "columns": [
+            {
+              "id": "77a4f36c97dd490180cc86ee23bb398d",
+              "name": "course_id",
+              "sqlType": "INT",
+              "isPrimaryKey": true,
+              "isNullable": false,
+              "isUnique": false,
+              "foreignKeyTable": "",
+              "foreignKeyColumn": "",
+              "order": 0
+            },
+            {
+              "id": "4d8bae2b966d4794bc75f53af0e07a34",
+              "name": "title",
+              "sqlType": "VARCHAR(200)",
+              "isPrimaryKey": false,
+              "isNullable": false,
+              "isUnique": false,
+              "foreignKeyTable": "",
+              "foreignKeyColumn": "",
+              "order": 1
+            },
+            {
+              "id": "596148eade724fd49ac1b2d2fcd6a9d5",
+              "name": "price",
+              "sqlType": "DECIMAL(10 2)",
+              "isPrimaryKey": false,
+              "isNullable": true,
+              "isUnique": false,
+              "foreignKeyTable": "",
+              "foreignKeyColumn": "",
+              "order": 2
+            },
+            {
+              "id": "e0823feb6b9a453dad53eb4bd6a46936",
+              "name": "category_id",
+              "sqlType": "INT",
+              "isPrimaryKey": false,
+              "isNullable": true,
+              "isUnique": false,
+              "foreignKeyTable": "test_categories",
+              "foreignKeyColumn": "category_id",
+              "order": 3
+            },
+            {
+              "id": "502eb69f1dc84e079d81f11f7405668e",
+              "name": "created_at",
+              "sqlType": "TIMESTAMP",
+              "isPrimaryKey": false,
+              "isNullable": true,
+              "isUnique": false,
+              "foreignKeyTable": "",
+              "foreignKeyColumn": "",
+              "order": 4
+            }
+          ]
+        },
+        {
+          "id": "21060b9c2a724e05b7d5f4fa264c6ebf",
+          "name": "test_lessons",
+          "lastValidName": "test_lessons",
+          "x": 805,
+          "y": 55,
+          "columns": [
+            {
+              "id": "274e94cb66c94762b44e5b9da89a1c71",
+              "name": "lesson_id",
+              "sqlType": "INT",
+              "isPrimaryKey": true,
+              "isNullable": false,
+              "isUnique": false,
+              "foreignKeyTable": "",
+              "foreignKeyColumn": "",
+              "order": 0
+            },
+            {
+              "id": "b7805ae38ad74b1eb896117f7c668c3d",
+              "name": "course_id",
+              "sqlType": "INT",
+              "isPrimaryKey": false,
+              "isNullable": false,
+              "isUnique": false,
+              "foreignKeyTable": "test_courses",
+              "foreignKeyColumn": "course_id",
+              "order": 1
+            },
+            {
+              "id": "965931a751544ada81504262542c29ac",
+              "name": "lesson_title",
+              "sqlType": "VARCHAR(200)",
+              "isPrimaryKey": false,
+              "isNullable": false,
+              "isUnique": false,
+              "foreignKeyTable": "",
+              "foreignKeyColumn": "",
+              "order": 2
+            },
+            {
+              "id": "6c99688631244a70aad02c94db8ccedf",
+              "name": "duration_minutes",
+              "sqlType": "INT",
+              "isPrimaryKey": false,
+              "isNullable": true,
+              "isUnique": false,
+              "foreignKeyTable": "",
+              "foreignKeyColumn": "",
+              "order": 3
+            }
+          ]
+        },
+        {
+          "id": "0e3c99f385614348880031b32224f8c8",
+          "name": "test_enrollments",
+          "lastValidName": "test_enrollments",
+          "x": 805,
+          "y": 261,
+          "columns": [
+            {
+              "id": "39db79e0e2d04d449c167932247f0923",
+              "name": "enrollment_id",
+              "sqlType": "INT",
+              "isPrimaryKey": true,
+              "isNullable": false,
+              "isUnique": false,
+              "foreignKeyTable": "",
+              "foreignKeyColumn": "",
+              "order": 0
+            },
+            {
+              "id": "066f809537914d4bab64f9b4df55ac7e",
+              "name": "user_id",
+              "sqlType": "INT",
+              "isPrimaryKey": false,
+              "isNullable": false,
+              "isUnique": false,
+              "foreignKeyTable": "test_users",
+              "foreignKeyColumn": "user_id",
+              "order": 1
+            },
+            {
+              "id": "a7c95bc1e66c441b8fd21c9afac0db77",
+              "name": "course_id",
+              "sqlType": "INT",
+              "isPrimaryKey": false,
+              "isNullable": false,
+              "isUnique": false,
+              "foreignKeyTable": "test_courses",
+              "foreignKeyColumn": "course_id",
+              "order": 2
+            },
+            {
+              "id": "464f6791883b41beb7c88fade8d233f9",
+              "name": "enrolled_at",
+              "sqlType": "TIMESTAMP",
+              "isPrimaryKey": false,
+              "isNullable": true,
+              "isUnique": false,
+              "foreignKeyTable": "",
+              "foreignKeyColumn": "",
+              "order": 3
+            },
+            {
+              "id": "d0b7bf0c2d904030bc0d7223a19de4b6",
+              "name": "payment_status",
+              "sqlType": "VARCHAR(20)",
+              "isPrimaryKey": false,
+              "isNullable": true,
+              "isUnique": false,
+              "foreignKeyTable": "",
+              "foreignKeyColumn": "",
+              "order": 4
+            }
+          ]
+        }
+      ],
+      "includeMockData": false,
+      "connectionString": null
+    },
+    "createdAt": "2026-06-18T15:06:10.4290114+00:00",
+    "updatedAt": "2026-06-18T18:09:46.294575+00:00"
+  }
+]
