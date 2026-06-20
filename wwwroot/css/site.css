@@ -390,6 +390,17 @@ textarea:focus-visible {
   font-weight: 800;
 }
 
+.soft-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 12px;
+  border-radius: 999px;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
 .table-column-preview {
   display: grid;
   gap: 4px;
@@ -1419,12 +1430,23 @@ textarea:focus-visible {
     linear-gradient(rgba(203, 213, 225, 0.22) 1px, transparent 1px),
     var(--bg-canvas);
   background-size: 24px 24px;
+  cursor: grab;
+}
+
+.canvas-viewport.panning {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+.canvas-viewport.panning * {
+  pointer-events: none !important;
 }
 
 .schema-canvas {
   position: relative;
   width: 1800px;
   height: 1200px;
+  cursor: grab;
 }
 
 .relation-svg,
