@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.RegularExpressions;
 using DoAnLapTrinhWeb.Models.Designer;
 
@@ -43,6 +43,7 @@ public sealed class SqlSchemaParser
             var definitions = SplitTopLevel(body, ',');
             var pendingPrimaryKeys = new List<string>();
             var pendingForeignKeys = new List<(List<string> LocalColumns, string TargetTable, List<string> TargetColumns)>();
+            var pendingUniqueKeys = new List<string>();
             var order = 0;
 
             foreach (var definition in definitions.Select(item => item.Trim()).Where(item => item.Length > 0))
@@ -64,6 +65,10 @@ public sealed class SqlSchemaParser
                             pendingForeignKeys.Add(foreignKey);
                         }
                     }
+                    else if (StartsWithKeyword(normalizedDefinition, "UNIQUE"))
+                    {
+                        pendingUniqueKeys.AddRange(ReadColumnsFromFirstParentheses(normalizedDefinition));
+                    }
 
                     continue;
                 }
@@ -82,6 +87,15 @@ public sealed class SqlSchemaParser
                 {
                     column.IsPrimaryKey = true;
                     column.IsNullable = false;
+                }
+            }
+
+            foreach (var uniqueKey in pendingUniqueKeys)
+            {
+                var column = FindColumn(table, uniqueKey);
+                if (column is not null)
+                {
+                    column.IsUnique = true;
                 }
             }
 
@@ -190,9 +204,11 @@ public sealed class SqlSchemaParser
             var cursor = match.Index + match.Length;
             cursor = SkipWhitespace(sql, cursor);
 
-            if (MatchesPhrase(sql, cursor, "IF NOT EXISTS"))
+            var remainingSql = sql[cursor..];
+            var ifNotExistsMatch = Regex.Match(remainingSql, @"^(?:IF\s+NOT\s+EXISTS|if\s+not\s+exists)\b");
+            if (ifNotExistsMatch.Success)
             {
-                cursor += "IF NOT EXISTS".Length;
+                cursor += ifNotExistsMatch.Length;
             }
 
             var tableName = ExtractQualifiedIdentifier(sql, cursor, out var tableNameEnd);
@@ -497,7 +513,7 @@ public sealed class SqlSchemaParser
                 continue;
             }
 
-            AddIfSeparator(tokens, character, builder);
+            AddIfSeparator(tokens, character, builder, depth);
         }
 
         if (builder.Length > 0)
@@ -508,9 +524,9 @@ public sealed class SqlSchemaParser
         return tokens;
     }
 
-    private static void AddIfSeparator(List<string> tokens, char character, StringBuilder builder)
+    private static void AddIfSeparator(List<string> tokens, char character, StringBuilder builder, int depth)
     {
-        if (character is ',' or ';')
+        if (depth == 0 && character is ',' or ';')
         {
             if (builder.Length > 0)
             {
