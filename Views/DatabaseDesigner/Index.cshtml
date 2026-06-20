@@ -711,27 +711,30 @@
         let selectionEnd = null;
 
         if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA' || activeEl.tagName === 'SELECT')) {
+            const isCanvas = activeEl.closest('.schema-table') !== null;
+            const prefix = isCanvas ? '.schema-table.editing ' : '.inspector-content ';
+
             if (activeEl.hasAttribute('data-edit-table-name')) {
-                focusSelector = '[data-edit-table-name]';
+                focusSelector = `${prefix}[data-edit-table-name]`;
             } else if (activeEl.hasAttribute('data-edit-column-name')) {
                 const columnId = activeEl.getAttribute('data-column-id');
-                focusSelector = `[data-edit-column-name][data-column-id="${columnId}"]`;
+                focusSelector = `${prefix}[data-edit-column-name][data-column-id="${columnId}"]`;
             } else if (activeEl.hasAttribute('data-edit-column-type')) {
                 const columnId = activeEl.getAttribute('data-column-id');
-                focusSelector = `[data-edit-column-type][data-column-id="${columnId}"]`;
+                focusSelector = `${prefix}[data-edit-column-type][data-column-id="${columnId}"]`;
             } else if (activeEl.hasAttribute('data-edit-pk')) {
                 const columnId = activeEl.getAttribute('data-column-id');
-                focusSelector = `[data-edit-pk][data-column-id="${columnId}"]`;
+                focusSelector = `${prefix}[data-edit-pk][data-column-id="${columnId}"]`;
             } else if (activeEl.hasAttribute('data-edit-nullable')) {
                 const columnId = activeEl.getAttribute('data-column-id');
-                focusSelector = `[data-edit-nullable][data-column-id="${columnId}"]`;
+                focusSelector = `${prefix}[data-edit-nullable][data-column-id="${columnId}"]`;
             } else if (activeEl.hasAttribute('data-edit-unique')) {
                 const columnId = activeEl.getAttribute('data-column-id');
-                focusSelector = `[data-edit-unique][data-column-id="${columnId}"]`;
+                focusSelector = `${prefix}[data-edit-unique][data-column-id="${columnId}"]`;
             } else if (activeEl.hasAttribute('data-edit-fk-table')) {
-                focusSelector = '[data-edit-fk-table]';
+                focusSelector = `${prefix}[data-edit-fk-table]`;
             } else if (activeEl.hasAttribute('data-edit-fk-column')) {
-                focusSelector = '[data-edit-fk-column]';
+                focusSelector = `${prefix}[data-edit-fk-column]`;
             } else if (activeEl.id) {
                 focusSelector = `#${activeEl.id}`;
             }
@@ -855,9 +858,6 @@
             relation.column.foreignKeyTable.toLowerCase() === table.name.toLowerCase()).length;
     }
 
-    function apiReadyCount(table) {
-        return table.columns.filter(column => column.isPrimaryKey || column.foreignKeyTable || column.isUnique).length;
-    }
 
     function setPropertyTab(tab) {
         state.propertyTab = tab;
@@ -868,6 +868,7 @@
     function deleteSelectedTable() {
         const table = selectedTable();
         if (!table) return;
+        if (!window.confirm(`Bạn có chắc chắn muốn xóa bảng "${table.name}" không?`)) return;
         const tableReferenceName = table.name || table.lastValidName || '';
         state.schema.tables = state.schema.tables.filter(candidate => candidate.id !== table.id);
         state.schema.tables.forEach(candidate => candidate.columns.forEach(column => {
@@ -878,6 +879,30 @@
         }));
         state.selectedTableId = state.schema.tables[0]?.id || null;
         state.selectedColumnId = state.schema.tables[0]?.columns[0]?.id || null;
+        state.canvasEditTableId = null;
+        render();
+        scheduleSchemaBroadcast();
+    }
+
+    function deleteTableById(tableId) {
+        const table = state.schema.tables.find(t => t.id === tableId);
+        if (!table) return;
+        if (!window.confirm(`Bạn có chắc chắn muốn xóa bảng "${table.name}" không?`)) return;
+        const tableReferenceName = table.name || table.lastValidName || '';
+        state.schema.tables = state.schema.tables.filter(candidate => candidate.id !== tableId);
+        state.schema.tables.forEach(candidate => candidate.columns.forEach(column => {
+            if (tableReferenceName && column.foreignKeyTable === tableReferenceName) {
+                column.foreignKeyTable = '';
+                column.foreignKeyColumn = '';
+            }
+        }));
+        if (state.selectedTableId === tableId) {
+            state.selectedTableId = state.schema.tables[0]?.id || null;
+            state.selectedColumnId = state.schema.tables[0]?.columns[0]?.id || null;
+        }
+        if (state.canvasEditTableId === tableId) {
+            state.canvasEditTableId = null;
+        }
         render();
         scheduleSchemaBroadcast();
     }
@@ -958,6 +983,7 @@
                             <button class="icon-btn small edit-table-btn" type="button" data-edit-table="${table.id}" aria-label="${isEditing ? 'Done editing' : 'Edit table'}">
                                 ${isEditing ? '✓' : '✏️'}
                             </button>
+                            <button class="icon-btn small delete-table-btn" type="button" data-delete-canvas-table="${table.id}" aria-label="Delete table"></button>
                         </div>
                     </header>
                     <div class="schema-table-body">${rows || '<div class="empty-columns">No columns</div>'}</div>
@@ -1089,7 +1115,6 @@
                 <div class="overview-metrics">
                     <div><strong>${table.columns.length}</strong><span>Columns</span></div>
                     <div><strong>${relationCountForTable(table)}</strong><span>Relations</span></div>
-                    <div><strong>${apiReadyCount(table)}</strong><span>API ready</span></div>
                 </div>
                 <label class="field-label">Table name</label>
                 <input class="text-input" data-edit-table-name value="${escapeHtml(table.name)}" />
@@ -1144,7 +1169,6 @@
                 <div class="property-pills">
                     <span>Cols: ${table.columns.length}</span>
                     <span>Rels: ${relationCountForTable(table)}</span>
-                    <span>API: ${apiReadyCount(table)}</span>
                 </div>
             </div>
             ${renderPropertyTabs()}
@@ -1804,6 +1828,13 @@
         if (editTableButton) {
             const tableId = editTableButton.dataset.editTable;
             state.canvasEditTableId = state.canvasEditTableId === tableId ? null : tableId;
+            if (state.canvasEditTableId) {
+                state.selectedTableId = tableId;
+                const table = selectedTable();
+                if (table && (!state.selectedColumnId || !table.columns.some(c => c.id === state.selectedColumnId))) {
+                    state.selectedColumnId = table.columns[0]?.id || null;
+                }
+            }
             render();
             return;
         }
@@ -1828,6 +1859,12 @@
         if (event.target.closest('[data-add-column]')) {
             const table = selectedTable();
             if (table) addColumn(table);
+            return;
+        }
+
+        const deleteCanvasTableButton = event.target.closest('[data-delete-canvas-table]');
+        if (deleteCanvasTableButton) {
+            deleteTableById(deleteCanvasTableButton.dataset.deleteCanvasTable);
             return;
         }
 
@@ -1965,6 +2002,7 @@
 
 
         document.addEventListener('pointerdown', event => {
+        if (event.target.closest('button, input, select, textarea')) return;
         const dragHandle = event.target.closest('[data-drag-table]');
         if (!dragHandle) return;
         const table = state.schema.tables.find(candidate => candidate.id === dragHandle.dataset.dragTable);

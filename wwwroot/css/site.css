@@ -1389,19 +1389,19 @@ textarea:focus-visible {
 }
 
 .relation-path.active {
-  color: #10b981; /* Xanh ngá»c ná»•i báº­t khi báº£ng liÃªn quan Ä‘Æ°á»£c chá»n */
+  color: #ef4444;
   stroke-width: 3.0;
   opacity: 1;
-  filter: drop-shadow(0 0 3px rgba(16, 185, 129, 0.5));
+  filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.45));
 }
 
 .relation-path.dimmed {
-  color: #94a3b8;
-  opacity: 0.15; /* LÃ m má» cÃ¡c Ä‘Æ°á»ng ná»‘i khÃ¡c khi chá»n má»™t báº£ng */
+  color: #0284c7;
+  opacity: 0.85;
 }
 
 .relation-label {
-  fill: #0284c7; /* Máº·c Ä‘á»‹nh cÃ¹ng tÃ´ng mÃ u xanh dÆ°Æ¡ng vá»›i liÃªn káº¿t */
+  fill: #0284c7;
   font-size: 9px;
   font-weight: 800;
   paint-order: stroke;
@@ -1416,17 +1416,18 @@ textarea:focus-visible {
 }
 
 .relation-label.dimmed {
-  opacity: 0.15;
+  fill: #0284c7;
+  opacity: 0.85;
 }
 
 .relation-label.active {
-  fill: #10b981;
+  fill: #ef4444;
   font-weight: 900;
   opacity: 1;
 }
 
 .relation-label.many.active {
-  fill: #059669;
+  fill: #dc2626;
   font-weight: 900;
   opacity: 1;
 }
@@ -1483,6 +1484,12 @@ textarea:focus-visible {
   background: var(--surface);
   font-size: 8px;
   font-weight: 800;
+}
+
+.table-header-actions {
+  display: flex;
+  gap: 2px;
+  align-items: center;
 }
 
 .table-chip-row {
@@ -1670,6 +1677,26 @@ textarea:focus-visible {
 
 .icon-btn:hover::before {
   color: var(--danger);
+}
+
+.edit-table-btn.icon-btn {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.edit-table-btn.icon-btn::before {
+  content: none;
+}
+
+.edit-table-btn.icon-btn:hover {
+  border-color: rgba(20, 133, 245, 0.35);
+  background: var(--blue-soft);
+  color: var(--blue-deep);
+}
+
+.delete-table-btn.icon-btn::before {
+  content: "✕";
+  font-size: 13px;
 }
 
 .inspector-content {
