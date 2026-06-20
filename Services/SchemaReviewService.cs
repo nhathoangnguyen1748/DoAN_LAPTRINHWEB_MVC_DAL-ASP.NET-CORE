@@ -49,17 +49,17 @@ public sealed class SchemaReviewService
             var model = Environment.GetEnvironmentVariable("GEMINI_REVIEW_MODEL");
             if (string.IsNullOrWhiteSpace(model))
             {
-                model = "gemini-2.5-flash";
+                model = "gemini-3.5-flash";
             }
 
-            var aiResult = await ReviewWithGeminiAsync(safeSchema, deterministic, apiKey, model, cancellationToken);
+            var (aiResult, usedModel) = await ReviewWithGeminiAsync(safeSchema, deterministic, apiKey, model, cancellationToken);
             if (aiResult is null)
             {
                 return deterministic;
             }
 
             aiResult.Issues ??= new List<ReviewIssue>();
-            aiResult.Source = $"Gemini {model} + deterministic database rules";
+            aiResult.Source = $"Gemini {usedModel} + deterministic database rules";
             MergeRuleIssues(aiResult, deterministic);
             aiResult.Summary = aiResult.Issues.Count == 0
                 ? "No database relationship issues were found."
@@ -2109,7 +2109,7 @@ public sealed class SchemaReviewService
         });
     }
 
-    private static async Task<AiReviewResult?> ReviewWithGeminiAsync(
+    private static async Task<(AiReviewResult? Result, string UsedModel)> ReviewWithGeminiAsync(
         DatabaseSchema schema,
         AiReviewResult deterministic,
         string apiKey,
@@ -2145,28 +2145,64 @@ public sealed class SchemaReviewService
             }
         };
 
-        using var response = await HttpClient.PostAsJsonAsync(endpoint, payload, cancellationToken);
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            return null;
+            using var response = await HttpClient.PostAsJsonAsync(endpoint, payload, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests && model != "gemini-2.5-flash")
+                {
+                    var fallbackModel = "gemini-2.5-flash";
+                    var fallbackEndpoint = $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(fallbackModel)}:generateContent?key={Uri.EscapeDataString(apiKey)}";
+                    using var fallbackResponse = await HttpClient.PostAsJsonAsync(fallbackEndpoint, payload, cancellationToken);
+                    if (!fallbackResponse.IsSuccessStatusCode)
+                    {
+                        return (null, model);
+                    }
+
+                    using var fallbackStream = await fallbackResponse.Content.ReadAsStreamAsync(cancellationToken);
+                    using var fallbackDocument = await JsonDocument.ParseAsync(fallbackStream, cancellationToken: cancellationToken);
+                    var fallbackText = fallbackDocument.RootElement
+                        .GetProperty("candidates")[0]
+                        .GetProperty("content")
+                        .GetProperty("parts")[0]
+                        .GetProperty("text")
+                        .GetString();
+
+                    if (string.IsNullOrWhiteSpace(fallbackText))
+                    {
+                        return (null, model);
+                    }
+
+                    fallbackText = StripJsonFence(fallbackText);
+                    var fallbackResult = JsonSerializer.Deserialize<AiReviewResult>(fallbackText, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    return (fallbackResult, fallbackModel);
+                }
+                return (null, model);
+            }
+
+            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            var text = document.RootElement
+                .GetProperty("candidates")[0]
+                .GetProperty("content")
+                .GetProperty("parts")[0]
+                .GetProperty("text")
+                .GetString();
+
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return (null, model);
+            }
+
+            text = StripJsonFence(text);
+            var result = JsonSerializer.Deserialize<AiReviewResult>(text, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return (result, model);
         }
-
-        using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-        var text = document.RootElement
-            .GetProperty("candidates")[0]
-            .GetProperty("content")
-            .GetProperty("parts")[0]
-            .GetProperty("text")
-            .GetString();
-
-        if (string.IsNullOrWhiteSpace(text))
+        catch
         {
-            return null;
+            return (null, model);
         }
-
-        text = StripJsonFence(text);
-        return JsonSerializer.Deserialize<AiReviewResult>(text, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
     }
 
     private static string StripJsonFence(string text)
