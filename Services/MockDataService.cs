@@ -370,7 +370,7 @@ public sealed class MockDataService
                 continue;
             }
 
-            var hasIdentityPk = table.Columns.Any(c => c.IsPrimaryKey && IsIntegerType(NormalizeSqlType(c.SqlType)));
+            var hasIdentityPk = table.Columns.Any(c => c.IsPrimaryKey && IsIntegerType(NormalizeSqlType(c.SqlType)) && string.IsNullOrWhiteSpace(c.ForeignKeyTable));
 
             sb.AppendLine($"-- Bảng: {table.Name}");
             sb.AppendLine($"IF NOT EXISTS (SELECT 1 FROM [{EscapeSql(table.Name)}])");

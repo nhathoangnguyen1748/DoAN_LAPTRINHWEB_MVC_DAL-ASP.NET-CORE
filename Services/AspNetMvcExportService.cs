@@ -128,6 +128,11 @@ public sealed class AspNetMvcExportService
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Migrations\**\*.sql">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>
 """;
     }
@@ -434,7 +439,7 @@ volumes:
             if (File.Exists(seedPath))
             {
                 var seedSql = await File.ReadAllTextAsync(seedPath);
-                var batches = seedSql.Split(new[] { "\nGO\n", "\nGO\r\n", "\r\nGO\r\n", "\r\nGO\n" }, StringSplitOptions.RemoveEmptyEntries);
+                var batches = System.Text.RegularExpressions.Regex.Split(seedSql, @"(?i)^\s*GO\s*$", System.Text.RegularExpressions.RegexOptions.Multiline);
                 foreach (var batch in batches)
                 {
                     var trimmed = batch.Trim();
