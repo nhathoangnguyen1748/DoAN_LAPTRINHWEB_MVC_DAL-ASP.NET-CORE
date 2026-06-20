@@ -1,4 +1,4 @@
-﻿using DoAnLapTrinhWeb.Data;
+using DoAnLapTrinhWeb.Data;
 using DoAnLapTrinhWeb.Services;
 using DoAnLapTrinhWeb.Hubs;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -58,6 +58,11 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
 }
+
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto
+});
 
 app.UseHttpsRedirection();
 app.UseRouting();
