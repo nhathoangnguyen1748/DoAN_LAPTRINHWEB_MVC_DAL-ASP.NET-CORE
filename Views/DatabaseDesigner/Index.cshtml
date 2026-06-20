@@ -193,45 +193,50 @@
 </div>
 
 <style>
-    .export-dialog-custom { max-width: 90vw; width: 100%; border-radius: 16px; font-family: inherit; display: flex; flex-direction: column; max-height: 96vh; }
-    .export-dialog-custom .import-dialog-header { background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 20px 24px; }
-    .export-dialog-custom .import-dialog-header h2 { margin: 0 0 4px; font-size: 1.25rem; color: #0f172a; font-weight: 700; }
-    .export-dialog-custom .import-dialog-header p { margin: 0; font-size: 0.9rem; color: #64748b; }
-    .export-body { padding: 24px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; flex: 1; min-height: 0; }
-    .export-field-group { display: flex; flex-direction: column; gap: 8px; }
-    .export-field-group label { font-size: 0.85rem; font-weight: 700; color: #334155; text-transform: uppercase; letter-spacing: 0.5px; }
-    .export-input { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; color: #0f172a; transition: all 0.2s; background: #fff; }
+    .export-dialog-custom { max-width: min(860px, calc(100vw - 28px)); width: 100%; border-radius: 14px; font-family: inherit; display: flex; flex-direction: column; max-height: calc(100vh - 28px); }
+    .export-dialog-custom .import-dialog-header { background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 14px 18px; }
+    .export-dialog-custom .import-dialog-header h2 { margin: 0 0 2px; font-size: 1.1rem; color: #0f172a; font-weight: 700; }
+    .export-dialog-custom .import-dialog-header p { margin: 0; font-size: 0.82rem; color: #64748b; }
+    .export-body { padding: 16px 18px; display: grid; grid-template-columns: minmax(220px, 0.9fr) minmax(300px, 1.1fr); gap: 14px; overflow: visible; flex: 1; min-height: 0; }
+    .export-field-group { display: flex; flex-direction: column; gap: 6px; }
+    .export-field-group label { font-size: 0.74rem; font-weight: 700; color: #334155; text-transform: uppercase; letter-spacing: 0.4px; }
+    .export-input { width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.9rem; color: #0f172a; transition: all 0.2s; background: #fff; }
     .export-input:focus { border-color: #3b82f6; outline: none; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); }
     
-    .export-radio-group { display: flex; flex-direction: column; gap: 10px; }
-    .export-radio-card { display: flex; align-items: flex-start; gap: 12px; padding: 14px; border: 1px solid #cbd5e1; border-radius: 10px; cursor: pointer; transition: all 0.2s; background: #fff; position: relative; }
+    .export-radio-group { display: flex; flex-direction: column; gap: 8px; }
+    .export-radio-card { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: #fff; position: relative; }
     .export-radio-card:hover { border-color: #94a3b8; background: #f8fafc; }
-    .export-radio-card input[type="radio"] { margin-top: 2px; width: 16px; height: 16px; cursor: pointer; }
-    .export-radio-info { display: flex; flex-direction: column; gap: 2px; }
-    .export-radio-title { font-weight: 700; color: #0f172a; font-size: 0.95rem; }
-    .export-radio-desc { font-size: 0.85rem; color: #64748b; }
+    .export-radio-card input[type="radio"] { margin-top: 1px; width: 15px; height: 15px; cursor: pointer; }
+    .export-radio-info { display: flex; flex-direction: column; gap: 1px; }
+    .export-radio-title { font-weight: 700; color: #0f172a; font-size: 0.88rem; }
+    .export-radio-desc { font-size: 0.76rem; color: #64748b; line-height: 1.25; }
     .export-radio-card:has(input[type="radio"]:checked) { border-color: #3b82f6; background: #eff6ff; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.05); }
     
-    .export-dynamic-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; animation: slideDown 0.2s ease-out forwards; }
-    .export-dynamic-box .export-field-group + .export-field-group { margin-top: 12px; }
-    .export-footer { padding: 16px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 12px; flex-shrink: 0; }
-    .export-btn { padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 0.95rem; cursor: pointer; transition: all 0.2s; border: none; display: flex; align-items: center; justify-content: center; }
+    .export-dynamic-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; animation: slideDown 0.2s ease-out forwards; }
+    .export-dynamic-box .export-field-group + .export-field-group { margin-top: 10px; }
+    .export-config-column { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+    .export-footer { padding: 12px 18px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px; flex-shrink: 0; }
+    .export-btn { padding: 9px 16px; border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer; transition: all 0.2s; border: none; display: flex; align-items: center; justify-content: center; }
     .export-btn-primary { background: #3b82f6; color: white; box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2); }
     .export-btn-primary:hover { background: #2563eb; transform: translateY(-1px); box-shadow: 0 4px 6px rgba(59, 130, 246, 0.25); }
     .export-btn-secondary { background: #fff; color: #475569; border: 1px solid #cbd5e1; }
     .export-btn-secondary:hover { background: #f1f5f9; color: #0f172a; }
     @@keyframes slideDown { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
-    .export-mockdata-toggle { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; cursor: pointer; }
+    .export-mockdata-toggle { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; cursor: pointer; grid-column: 1 / -1; }
     .export-mockdata-toggle:hover { border-color: #94a3b8; background: #f1f5f9; }
     .export-mockdata-info { display: flex; flex-direction: column; gap: 2px; }
-    .export-mockdata-info strong { font-size: 0.95rem; color: #0f172a; }
-    .export-mockdata-info span { font-size: 0.82rem; color: #64748b; }
+    .export-mockdata-info strong { font-size: 0.9rem; color: #0f172a; }
+    .export-mockdata-info span { font-size: 0.76rem; color: #64748b; }
     .export-toggle-switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
     .export-toggle-switch input { opacity: 0; width: 0; height: 0; }
     .export-toggle-track { position: absolute; inset: 0; background: #cbd5e1; border-radius: 999px; transition: background 0.2s; cursor: pointer; }
     .export-toggle-track::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: white; border-radius: 50%; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
     .export-toggle-switch input:checked + .export-toggle-track { background: #3b82f6; }
     .export-toggle-switch input:checked + .export-toggle-track::before { transform: translateX(18px); }
+    @@media (max-width: 720px) {
+        .export-body { grid-template-columns: 1fr; overflow-y: auto; }
+        .export-mockdata-toggle { grid-column: auto; }
+    }
 </style>
 
 <div id="exportConfigOverlay" class="review-overlay" hidden style="background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center;">
@@ -242,71 +247,75 @@
         </div>
         
         <div class="export-body">
-            <div class="export-field-group">
-                <label for="exportProjectName">Project Name</label>
-                <input type="text" id="exportProjectName" class="export-input" placeholder="e.g. MyAwesomeApp" />
-            </div>
-
-            <div class="export-radio-group">
-                <label class="export-radio-card">
-                    <input type="radio" name="exportMode" value="local" checked onchange="document.getElementById('localConfigFields').style.display='block'; document.getElementById('liveConfigFields').style.display='none'; document.getElementById('preconfigInfo').style.display='none';" />
-                    <div class="export-radio-info">
-                        <span class="export-radio-title">Local Server</span>
-                        <span class="export-radio-desc">Export for local development (e.g., localhost\SQLEXPRESS).</span>
-                    </div>
-                </label>
-
-                <label class="export-radio-card">
-                    <input type="radio" name="exportMode" value="live" onchange="document.getElementById('localConfigFields').style.display='none'; document.getElementById('liveConfigFields').style.display='block'; document.getElementById('preconfigInfo').style.display='none';" />
-                    <div class="export-radio-info">
-                        <span class="export-radio-title">Live Server</span>
-                        <span class="export-radio-desc">Connect to a remote SQL Server with credentials.</span>
-                    </div>
-                </label>
-
-                <label class="export-radio-card">
-                    <input type="radio" name="exportMode" value="preconfig" onchange="document.getElementById('localConfigFields').style.display='none'; document.getElementById('liveConfigFields').style.display='none'; document.getElementById('preconfigInfo').style.display='block';" />
-                    <div class="export-radio-info">
-                        <span class="export-radio-title">Pre-configured Cloud</span>
-                        <span class="export-radio-desc">Use the default shared cloud database instantly.</span>
-                    </div>
-                </label>
-            </div>
-
-            <div id="localConfigFields" class="export-dynamic-box" style="display: block;">
+            <div class="export-config-column">
                 <div class="export-field-group">
-                    <label for="localServerName">SQL Server Instance</label>
-                    <input type="text" id="localServerName" class="export-input" placeholder="e.g. localhost\SQLEXPRESS" />
+                    <label for="exportProjectName">Project Name</label>
+                    <input type="text" id="exportProjectName" class="export-input" placeholder="e.g. MyAwesomeApp" />
+                </div>
+
+                <div class="export-radio-group">
+                    <label class="export-radio-card">
+                        <input type="radio" name="exportMode" value="local" checked onchange="document.getElementById('localConfigFields').style.display='block'; document.getElementById('liveConfigFields').style.display='none'; document.getElementById('preconfigInfo').style.display='none';" />
+                        <div class="export-radio-info">
+                            <span class="export-radio-title">Local Server</span>
+                            <span class="export-radio-desc">Export for local development (e.g., localhost\SQLEXPRESS).</span>
+                        </div>
+                    </label>
+
+                    <label class="export-radio-card">
+                        <input type="radio" name="exportMode" value="live" onchange="document.getElementById('localConfigFields').style.display='none'; document.getElementById('liveConfigFields').style.display='block'; document.getElementById('preconfigInfo').style.display='none';" />
+                        <div class="export-radio-info">
+                            <span class="export-radio-title">Live Server</span>
+                            <span class="export-radio-desc">Connect to a remote SQL Server with credentials.</span>
+                        </div>
+                    </label>
+
+                    <label class="export-radio-card">
+                        <input type="radio" name="exportMode" value="preconfig" onchange="document.getElementById('localConfigFields').style.display='none'; document.getElementById('liveConfigFields').style.display='none'; document.getElementById('preconfigInfo').style.display='block';" />
+                        <div class="export-radio-info">
+                            <span class="export-radio-title">Pre-configured Cloud</span>
+                            <span class="export-radio-desc">Use the default shared cloud database instantly.</span>
+                        </div>
+                    </label>
                 </div>
             </div>
 
-            <div id="liveConfigFields" class="export-dynamic-box" style="display: none;">
-                <div class="export-field-group">
-                    <label for="liveServerName">Server Address / IP</label>
-                    <input type="text" id="liveServerName" class="export-input" placeholder="e.g. 103.72.56.55,1433" />
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+            <div class="export-config-column">
+                <div id="localConfigFields" class="export-dynamic-box" style="display: block;">
                     <div class="export-field-group">
-                        <label for="liveLogin">Username</label>
-                        <input type="text" id="liveLogin" class="export-input" placeholder="sa" />
-                    </div>
-                    <div class="export-field-group">
-                        <label for="livePassword">Password</label>
-                        <input type="password" id="livePassword" class="export-input" placeholder="••••••••" />
+                        <label for="localServerName">SQL Server Instance</label>
+                        <input type="text" id="localServerName" class="export-input" placeholder="e.g. localhost\SQLEXPRESS" />
                     </div>
                 </div>
-            </div>
 
-            <div id="preconfigInfo" class="export-dynamic-box" style="display: none;">
-                <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.95rem; color: #475569;">
-                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
-                        <span>Server Host:</span> <strong style="color: #0f172a;">103.72.56.55,2025</strong>
+                <div id="liveConfigFields" class="export-dynamic-box" style="display: none;">
+                    <div class="export-field-group">
+                        <label for="liveServerName">Server Address / IP</label>
+                        <input type="text" id="liveServerName" class="export-input" placeholder="e.g. 103.72.56.55,1433" />
                     </div>
-                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
-                        <span>Login User:</span> <strong style="color: #0f172a;">sa</strong>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                        <div class="export-field-group">
+                            <label for="liveLogin">Username</label>
+                            <input type="text" id="liveLogin" class="export-input" placeholder="sa" />
+                        </div>
+                        <div class="export-field-group">
+                            <label for="livePassword">Password</label>
+                            <input type="password" id="livePassword" class="export-input" placeholder="********" />
+                        </div>
                     </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span>Password:</span> <strong style="color: #0f172a;">!Pass123</strong>
+                </div>
+
+                <div id="preconfigInfo" class="export-dynamic-box" style="display: none;">
+                    <div style="display: flex; flex-direction: column; gap: 7px; font-size: 0.88rem; color: #475569;">
+                        <div style="display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
+                            <span>Server Host:</span> <strong style="color: #0f172a;">103.72.56.55,2025</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
+                            <span>Login User:</span> <strong style="color: #0f172a;">sa</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; gap: 12px;">
+                            <span>Password:</span> <strong style="color: #0f172a;">!Pass123</strong>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -570,17 +579,22 @@
         elements.teamLiveCount.textContent = `${onlineEmails.size} online`;
         elements.teamLiveMembers.innerHTML = allProjectMembers.length === 0
             ? '<span class="team-live-empty">No members</span>'
-            : allProjectMembers.map(email => {
-                const isOnline = onlineEmails.has(email.toLowerCase());
-                const dotColor = isOnline ? '#10b981' : '#ef4444';
-                const dotShadow = isOnline ? '0 0 0 3px rgba(16, 185, 129, 0.25)' : '0 0 0 3px rgba(239, 68, 68, 0.2)';
-                return `
-                    <span class="team-member-chip ${isOnline ? 'online' : 'offline'}" title="${escapeHtml(displayEmail(email))}">
-                        ${escapeHtml(shortEmail(email))}
-                        <i style="--member-color: ${dotColor}; box-shadow: ${dotShadow}; margin-left: 4px;"></i>
-                    </span>
-                `;
-            }).join('');
+            : `
+                <details class="team-live-combo">
+                    <summary>${allProjectMembers.length} member${allProjectMembers.length === 1 ? '' : 's'} - click to view</summary>
+                    <div class="team-live-menu" role="list" aria-label="Team live members">
+                        ${allProjectMembers.map(email => {
+                            const isOnline = onlineEmails.has(email.toLowerCase());
+                            return `
+                                <div class="team-live-menu-item" role="listitem" title="${escapeHtml(displayEmail(email))}">
+                                    <i class="${isOnline ? 'online' : 'offline'}" aria-hidden="true"></i>
+                                    <span>${escapeHtml(displayEmail(email))}</span>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </details>
+            `;
     }
 
     function renderTeamActivities() {
