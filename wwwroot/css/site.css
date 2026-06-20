@@ -1271,14 +1271,14 @@ textarea:focus-visible {
 
 .team-live-panel {
   display: grid;
-  flex: 1 1 320px;
-  min-width: 220px;
-  max-width: 520px;
+  flex: 0 1 auto;
+  min-width: 145px;
+  max-width: 320px;
   gap: 4px;
-  padding: 5px 8px;
-  border: 1px solid rgba(217, 228, 238, 0.85);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.72);
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
 }
 
 .team-live-head,
@@ -1309,11 +1309,7 @@ textarea:focus-visible {
 }
 
 .live-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--green);
-  box-shadow: 0 0 0 4px rgba(4, 120, 87, 0.1);
+  display: none;
 }
 
 .team-live-members,
@@ -1324,24 +1320,27 @@ textarea:focus-visible {
 }
 
 .team-member-chip {
+  display: inline-flex;
+  align-items: center;
   flex: 0 0 auto;
-  gap: 5px;
-  max-width: 118px;
-  min-height: 20px;
-  padding: 2px 7px;
+  gap: 6px;
+  padding: 3px 8px;
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--text-soft);
   background: var(--surface);
   font-size: 9px;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .team-member-chip i {
+  display: inline-block;
   width: 7px;
   height: 7px;
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--member-color, var(--blue));
+  flex-shrink: 0;
 }
 
 .team-member-chip em {
@@ -2038,7 +2037,7 @@ textarea:focus-visible {
 
 .overview-metrics {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 6px;
 }
 

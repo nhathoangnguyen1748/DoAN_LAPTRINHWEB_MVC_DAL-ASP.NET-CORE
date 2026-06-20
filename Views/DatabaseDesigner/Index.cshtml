@@ -193,7 +193,7 @@
 </div>
 
 <style>
-    .export-dialog-custom { max-width: 480px; width: 100%; border-radius: 16px; font-family: inherit; display: flex; flex-direction: column; max-height: 90vh; }
+    .export-dialog-custom { max-width: 90vw; width: 100%; border-radius: 16px; font-family: inherit; display: flex; flex-direction: column; max-height: 96vh; }
     .export-dialog-custom .import-dialog-header { background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 20px 24px; }
     .export-dialog-custom .import-dialog-header h2 { margin: 0 0 4px; font-size: 1.25rem; color: #0f172a; font-weight: 700; }
     .export-dialog-custom .import-dialog-header p { margin: 0; font-size: 0.9rem; color: #64748b; }
@@ -337,6 +337,9 @@
     const initialSchema = @Html.Raw(initialSchemaJson);
     const currentProjectId = @Html.Raw(currentProjectIdJson);
     const currentUserEmail = @Html.Raw(currentUserEmailJson);
+    const projectOwnerEmail = '@Html.Raw(Model.Projects.FirstOrDefault(p => p.Id == Model.CurrentProjectId)?.OwnerEmail ?? "")';
+    const collaboratorEmails = @Html.Raw(JsonSerializer.Serialize(Model.CollaboratorEmails, jsonOptions));
+    const allProjectMembers = Array.from(new Set([projectOwnerEmail, ...collaboratorEmails].filter(Boolean)));
     const canvasSize = { width: 1800, height: 1200 };
     const tableWidth = 214;
     const headerHeight = 50;
@@ -466,26 +469,38 @@
     }
 
     function normalizeSchema(schema) {
+        if (!schema) schema = {};
+        const getProp = (obj, prop) => {
+            if (!obj) return undefined;
+            if (obj[prop] !== undefined) return obj[prop];
+            const upper = prop.charAt(0).toUpperCase() + prop.slice(1);
+            return obj[upper];
+        };
+
+        const tablesRaw = getProp(schema, 'tables') || [];
         state.schema = {
-            projectName: schema.projectName || elements.projectName.value || 'GeneratedMvcApp',
-            tables: (schema.tables || []).map((table, tableIndex) => ({
-                id: table.id || uid(),
-                name: table.name ?? `table_${tableIndex + 1}`,
-                lastValidName: table.lastValidName || table.name || `table_${tableIndex + 1}`,
-                x: Number.isFinite(Number(table.x)) ? Number(table.x) : 85 + (tableIndex % 3) * 330,
-                y: Number.isFinite(Number(table.y)) ? Number(table.y) : 55 + Math.floor(tableIndex / 3) * 220,
-                columns: (table.columns || []).map((column, columnIndex) => ({
-                    id: column.id || uid(),
-                    name: column.name || `column_${columnIndex + 1}`,
-                    sqlType: column.sqlType || 'nvarchar(255)',
-                    isPrimaryKey: Boolean(column.isPrimaryKey),
-                    isNullable: column.isPrimaryKey ? false : column.isNullable !== false,
-                    isUnique: Boolean(column.isUnique),
-                    foreignKeyTable: column.foreignKeyTable || '',
-                    foreignKeyColumn: column.foreignKeyColumn || '',
-                    order: Number.isFinite(Number(column.order)) ? Number(column.order) : columnIndex
-                }))
-            }))
+            projectName: getProp(schema, 'projectName') || elements.projectName.value || 'GeneratedMvcApp',
+            tables: tablesRaw.map((table, tableIndex) => {
+                const colsRaw = getProp(table, 'columns') || [];
+                return {
+                    id: getProp(table, 'id') || uid(),
+                    name: getProp(table, 'name') ?? `table_${tableIndex + 1}`,
+                    lastValidName: getProp(table, 'lastValidName') || getProp(table, 'name') || `table_${tableIndex + 1}`,
+                    x: Number.isFinite(Number(getProp(table, 'x'))) ? Number(getProp(table, 'x')) : 85 + (tableIndex % 3) * 330,
+                    y: Number.isFinite(Number(getProp(table, 'y'))) ? Number(getProp(table, 'y')) : 55 + Math.floor(tableIndex / 3) * 220,
+                    columns: colsRaw.map((column, columnIndex) => ({
+                        id: getProp(column, 'id') || uid(),
+                        name: getProp(column, 'name') || `column_${columnIndex + 1}`,
+                        sqlType: getProp(column, 'sqlType') || 'nvarchar(255)',
+                        isPrimaryKey: Boolean(getProp(column, 'isPrimaryKey')),
+                        isNullable: getProp(column, 'isPrimaryKey') ? false : getProp(column, 'isNullable') !== false,
+                        isUnique: Boolean(getProp(column, 'isUnique')),
+                        foreignKeyTable: getProp(column, 'foreignKeyTable') || '',
+                        foreignKeyColumn: getProp(column, 'foreignKeyColumn') || '',
+                        order: Number.isFinite(Number(getProp(column, 'order'))) ? Number(getProp(column, 'order')) : columnIndex
+                    }))
+                };
+            })
         };
         elements.projectName.value = state.schema.projectName;
         if (state.schema.tables.length === 0) {
@@ -550,17 +565,22 @@
 
     function renderTeamPresence(members = collaboration.members) {
         collaboration.members = Array.isArray(members) ? members : [];
-        const uniqueMembers = collaboration.members.filter(member => member?.email);
-        elements.teamLiveCount.textContent = `${uniqueMembers.length} online`;
-        elements.teamLiveMembers.innerHTML = uniqueMembers.length === 0
-            ? '<span class="team-live-empty">Waiting for project members</span>'
-            : uniqueMembers.map(member => `
-                <span class="team-member-chip" title="${escapeHtml(displayEmail(member.email))}">
-                    <i style="--member-color: ${escapeHtml(member.color || colorFromEmail(member.email))}"></i>
-                    ${escapeHtml(shortEmail(member.email))}
-                    ${Number(member.sessions) > 1 ? `<em>${Number(member.sessions)}</em>` : ''}
-                </span>
-            `).join('');
+        const onlineEmails = new Set(collaboration.members.map(m => (m?.email || '').toLowerCase()));
+        
+        elements.teamLiveCount.textContent = `${onlineEmails.size} online`;
+        elements.teamLiveMembers.innerHTML = allProjectMembers.length === 0
+            ? '<span class="team-live-empty">No members</span>'
+            : allProjectMembers.map(email => {
+                const isOnline = onlineEmails.has(email.toLowerCase());
+                const dotColor = isOnline ? '#10b981' : '#ef4444';
+                const dotShadow = isOnline ? '0 0 0 3px rgba(16, 185, 129, 0.25)' : '0 0 0 3px rgba(239, 68, 68, 0.2)';
+                return `
+                    <span class="team-member-chip ${isOnline ? 'online' : 'offline'}" title="${escapeHtml(displayEmail(email))}">
+                        ${escapeHtml(shortEmail(email))}
+                        <i style="--member-color: ${dotColor}; box-shadow: ${dotShadow}; margin-left: 4px;"></i>
+                    </span>
+                `;
+            }).join('');
     }
 
     function renderTeamActivities() {
@@ -612,9 +632,14 @@
 
     function applyRemoteSchema(schema, email) {
         state.applyingRemoteUpdate = true;
-        normalizeSchema(schema || { projectName: 'GeneratedMvcApp', tables: [] });
-        render();
-        state.applyingRemoteUpdate = false;
+        try {
+            normalizeSchema(schema || { projectName: 'GeneratedMvcApp', tables: [] });
+            render();
+        } catch (error) {
+            console.error("Error applying remote schema:", error);
+        } finally {
+            state.applyingRemoteUpdate = false;
+        }
         elements.canvasTipText.textContent = `Updated by ${email || 'teammate'}.`;
     }
 
@@ -1833,7 +1858,13 @@
     async function exportProject() {
         let connectionString = '';
         const mode = document.querySelector('input[name="exportMode"]:checked').value;
-        const newProjectName = document.getElementById('exportProjectName').value.trim() || 'GeneratedMvcApp';
+        const newProjectName = document.getElementById('exportProjectName').value.trim();
+        
+        if (!newProjectName) {
+            showToast('Vui lòng nhập Project Name.');
+            return;
+        }
+
         state.schema.projectName = newProjectName;
         
         let safeProjectName = newProjectName.replace(/[^A-Za-z0-9_]/g, '');
@@ -1841,12 +1872,20 @@
         if (/^[0-9]/.test(safeProjectName)) safeProjectName = 'Item' + safeProjectName;
 
         if (mode === 'local') {
-            const serverName = document.getElementById('localServerName').value.trim() || 'localhost';
+            const serverName = document.getElementById('localServerName').value.trim();
+            if (!serverName) {
+                showToast('Vui lòng nhập SQL Server Instance.');
+                return;
+            }
             connectionString = `Server=${serverName};Database=${safeProjectName}Db;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true`;
         } else if (mode === 'live') {
             const serverName = document.getElementById('liveServerName').value.trim();
             const login = document.getElementById('liveLogin').value.trim();
             const password = document.getElementById('livePassword').value.trim();
+            if (!serverName || !login || !password) {
+                showToast('Vui lòng nhập đầy đủ thông tin Live Server (Server Address, Username, Password).');
+                return;
+            }
             connectionString = `Server=${serverName};Database=${safeProjectName}Db;User Id=${login};Password=${password};TrustServerCertificate=True;MultipleActiveResultSets=true`;
         } else if (mode === 'preconfig') {
             connectionString = `Server=103.72.56.55,2025;Database=${safeProjectName}Db;User Id=sa;Password=!Pass123;TrustServerCertificate=True;MultipleActiveResultSets=true`;
@@ -2178,7 +2217,10 @@
     elements.canvasViewport.addEventListener('pointerup', stopPanning);
     elements.canvasViewport.addEventListener('pointercancel', stopPanning);
 
-    elements.projectName.addEventListener('input', render);
+    elements.projectName.addEventListener('input', () => {
+        render();
+        scheduleSchemaBroadcast(320, `renamed project to ${elements.projectName.value}`);
+    });
     elements.openSqlModalBtn.addEventListener('click', openSqlImport);
     elements.closeSqlImportBtn.addEventListener('click', closeSqlImport);
     elements.importSqlBtn.addEventListener('click', importSql);
