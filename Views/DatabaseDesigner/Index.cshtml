@@ -1541,7 +1541,7 @@
             let cursor = match.index + match[0].length;
             while (cursor < cleaned.length && /\s/.test(cleaned[cursor])) cursor++;
             const remaining = cleaned.slice(cursor);
-            const ifNotExistsMatch = remaining.match(/^(?:IF\s+NOT\s+EXISTS|if\s+not\s+exists)\b/);
+            const ifNotExistsMatch = remaining.match(/^IF\s+NOT\s+EXISTS\b/i);
             if (ifNotExistsMatch) {
                 cursor += ifNotExistsMatch[0].length;
             }

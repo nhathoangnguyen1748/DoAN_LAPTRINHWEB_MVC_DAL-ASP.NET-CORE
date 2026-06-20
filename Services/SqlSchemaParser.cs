@@ -205,7 +205,7 @@ public sealed class SqlSchemaParser
             cursor = SkipWhitespace(sql, cursor);
 
             var remainingSql = sql[cursor..];
-            var ifNotExistsMatch = Regex.Match(remainingSql, @"^(?:IF\s+NOT\s+EXISTS|if\s+not\s+exists)\b");
+            var ifNotExistsMatch = Regex.Match(remainingSql, @"^IF\s+NOT\s+EXISTS\b", RegexOptions.IgnoreCase);
             if (ifNotExistsMatch.Success)
             {
                 cursor += ifNotExistsMatch.Length;
