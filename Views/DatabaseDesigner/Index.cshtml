@@ -2106,7 +2106,10 @@
         state.dragging = null;
     });
 
-    elements.projectName.addEventListener('input', render);
+    elements.projectName.addEventListener('input', () => {
+        render();
+        scheduleSchemaBroadcast(320, `renamed project to ${elements.projectName.value}`);
+    });
     elements.openSqlModalBtn.addEventListener('click', openSqlImport);
     elements.closeSqlImportBtn.addEventListener('click', closeSqlImport);
     elements.importSqlBtn.addEventListener('click', importSql);
