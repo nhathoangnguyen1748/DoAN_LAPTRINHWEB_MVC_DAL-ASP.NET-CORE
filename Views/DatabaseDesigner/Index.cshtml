@@ -357,7 +357,8 @@
         zoom: 0.48,
         projectId: currentProjectId,
         applyingRemoteUpdate: false,
-        canvasEditTableId: null
+        canvasEditTableId: null,
+        panning: null
     };
 
     const elements = {
@@ -2129,6 +2130,53 @@
         }
         state.dragging = null;
     });
+
+    elements.canvasViewport.addEventListener('pointerdown', event => {
+        if (event.button !== 0) return;
+        if (event.target.closest('button, input, select, textarea')) return;
+        if (event.target.closest('.schema-table')) return;
+        if (event.target.closest('.row-anchor')) return;
+
+        state.panning = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            startScrollLeft: elements.canvasViewport.scrollLeft,
+            startScrollTop: elements.canvasViewport.scrollTop
+        };
+
+        elements.canvasViewport.classList.add('panning');
+        elements.canvasViewport.setPointerCapture?.(event.pointerId);
+    });
+
+    elements.canvasViewport.addEventListener('pointermove', event => {
+        if (!state.panning || state.panning.pointerId !== event.pointerId) return;
+
+        const pan = state.panning;
+        const dx = event.clientX - pan.startX;
+        const dy = event.clientY - pan.startY;
+
+        elements.canvasViewport.scrollLeft = pan.startScrollLeft - dx;
+        elements.canvasViewport.scrollTop = pan.startScrollTop - dy;
+    });
+
+    const stopPanning = event => {
+        if (!state.panning) return;
+        if (event && state.panning.pointerId !== event.pointerId) return;
+
+        if (event && elements.canvasViewport.releasePointerCapture) {
+            try {
+                elements.canvasViewport.releasePointerCapture(event.pointerId);
+            } catch (e) {
+                // ignore
+            }
+        }
+        state.panning = null;
+        elements.canvasViewport.classList.remove('panning');
+    };
+
+    elements.canvasViewport.addEventListener('pointerup', stopPanning);
+    elements.canvasViewport.addEventListener('pointercancel', stopPanning);
 
     elements.projectName.addEventListener('input', render);
     elements.openSqlModalBtn.addEventListener('click', openSqlImport);
