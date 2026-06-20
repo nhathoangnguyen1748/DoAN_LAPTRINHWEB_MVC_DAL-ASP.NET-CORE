@@ -1258,6 +1258,116 @@ textarea:focus-visible {
   gap: 6px;
 }
 
+.team-live-panel {
+  display: grid;
+  flex: 1 1 320px;
+  min-width: 220px;
+  max-width: 520px;
+  gap: 4px;
+  padding: 5px 8px;
+  border: 1px solid rgba(217, 228, 238, 0.85);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.team-live-head,
+.team-live-members,
+.team-activity-list,
+.team-member-chip,
+.team-activity-item {
+  display: flex;
+  align-items: center;
+}
+
+.team-live-head {
+  gap: 6px;
+  min-width: 0;
+}
+
+.team-live-head strong {
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.team-live-head small {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(4, 120, 87, 0.1);
+}
+
+.team-live-members,
+.team-activity-list {
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.team-member-chip {
+  flex: 0 0 auto;
+  gap: 5px;
+  max-width: 118px;
+  min-height: 20px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-soft);
+  background: var(--surface);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.team-member-chip i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--member-color, var(--blue));
+}
+
+.team-member-chip em {
+  display: grid;
+  min-width: 14px;
+  height: 14px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--surface);
+  background: var(--member-color, var(--blue));
+  font-size: 8px;
+  font-style: normal;
+}
+
+.team-activity-item {
+  min-width: 0;
+  max-width: 100%;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.team-activity-item:not(:first-child) {
+  display: none;
+}
+
+.team-activity-item strong {
+  color: var(--blue-deep);
+}
+
+.team-live-empty,
+.team-activity-empty {
+  color: var(--muted);
+  font-size: 9px;
+}
+
 .soft-pill.success {
   color: var(--green);
   background: var(--green-soft);
@@ -2129,6 +2239,11 @@ textarea:focus-visible {
   .diagram-actions,
   .canvas-badges {
     justify-content: flex-start;
+  }
+
+  .team-live-panel {
+    width: 100%;
+    max-width: none;
   }
 
   .project-overview {
