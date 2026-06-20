@@ -21,50 +21,59 @@ public class ProjectCollaborationHub : Hub
 
     public async Task JoinProject(string projectId, string? color = null)
     {
-        if (!await CanAccessProjectAsync(projectId))
+        if (string.IsNullOrWhiteSpace(projectId)) return;
+        var cleanId = projectId.Trim().ToLowerInvariant();
+
+        if (!await CanAccessProjectAsync(cleanId))
         {
             throw new HubException("You do not have access to this project.");
         }
 
-        var projects = JoinedProjects.GetOrAdd(Context.ConnectionId, _ => new HashSet<string>(StringComparer.Ordinal));
+        var projects = JoinedProjects.GetOrAdd(Context.ConnectionId, _ => new HashSet<string>(StringComparer.OrdinalIgnoreCase));
         lock (projects)
         {
-            projects.Add(projectId);
+            projects.Add(cleanId);
         }
 
-        await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(projectId));
-        var members = ProjectMembers.GetOrAdd(projectId, _ => new ConcurrentDictionary<string, MemberPresence>());
+        await Groups.AddToGroupAsync(Context.ConnectionId, GroupName(cleanId));
+        var members = ProjectMembers.GetOrAdd(cleanId, _ => new ConcurrentDictionary<string, MemberPresence>());
         members[Context.ConnectionId] = new MemberPresence(CurrentEmail(), NormalizeColor(color));
 
-        await Clients.Group(GroupName(projectId)).SendAsync("PresenceUpdated", GetProjectPresence(projectId));
-        await Clients.Group(GroupName(projectId)).SendAsync("ActivityUpdated", CreateActivity("joined the project"));
+        await Clients.Group(GroupName(cleanId)).SendAsync("PresenceUpdated", GetProjectPresence(cleanId));
+        await Clients.Group(GroupName(cleanId)).SendAsync("ActivityUpdated", CreateActivity("joined the project"));
     }
 
     public async Task BroadcastSchema(string projectId, DatabaseSchema schema, string? activity = null)
     {
-        if (!HasJoined(projectId))
+        if (string.IsNullOrWhiteSpace(projectId)) return;
+        var cleanId = projectId.Trim().ToLowerInvariant();
+
+        if (!HasJoined(cleanId))
         {
             throw new HubException("Join the project before sending updates.");
         }
 
-        var project = await _projectStore.SaveSchemaAsync(projectId, CurrentEmail(), schema);
+        var project = await _projectStore.SaveSchemaAsync(cleanId, CurrentEmail(), schema);
         if (project is null)
         {
             throw new HubException("Unable to save project update.");
         }
 
-        await Clients.OthersInGroup(GroupName(projectId)).SendAsync("SchemaUpdated", schema, CurrentEmail());
-        await Clients.Group(GroupName(projectId)).SendAsync("ActivityUpdated", CreateActivity(activity ?? "updated the database schema"));
+        await Clients.OthersInGroup(GroupName(cleanId)).SendAsync("SchemaUpdated", schema, CurrentEmail());
+        await Clients.Group(GroupName(cleanId)).SendAsync("ActivityUpdated", CreateActivity(activity ?? "updated the database schema"));
     }
 
     public async Task MoveCursor(string projectId, double x, double y, string color)
     {
-        if (!HasJoined(projectId))
+        if (string.IsNullOrWhiteSpace(projectId)) return;
+        var cleanId = projectId.Trim().ToLowerInvariant();
+
+        if (!HasJoined(cleanId))
         {
             return;
         }
 
-        await Clients.OthersInGroup(GroupName(projectId)).SendAsync("CursorMoved", new
+        await Clients.OthersInGroup(GroupName(cleanId)).SendAsync("CursorMoved", new
         {
             email = CurrentEmail(),
             x,
@@ -75,18 +84,21 @@ public class ProjectCollaborationHub : Hub
 
     public async Task LeaveProject(string projectId)
     {
+        if (string.IsNullOrWhiteSpace(projectId)) return;
+        var cleanId = projectId.Trim().ToLowerInvariant();
+
         if (JoinedProjects.TryGetValue(Context.ConnectionId, out var projects))
         {
             lock (projects)
             {
-                projects.Remove(projectId);
+                projects.Remove(cleanId);
             }
         }
 
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupName(projectId));
-        RemoveMember(projectId);
-        await Clients.Group(GroupName(projectId)).SendAsync("PresenceUpdated", GetProjectPresence(projectId));
-        await Clients.OthersInGroup(GroupName(projectId)).SendAsync("ActivityUpdated", CreateActivity("left the project"));
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupName(cleanId));
+        RemoveMember(cleanId);
+        await Clients.Group(GroupName(cleanId)).SendAsync("PresenceUpdated", GetProjectPresence(cleanId));
+        await Clients.OthersInGroup(GroupName(cleanId)).SendAsync("ActivityUpdated", CreateActivity("left the project"));
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
@@ -101,9 +113,10 @@ public class ProjectCollaborationHub : Hub
 
             foreach (var projectId in projectIds)
             {
-                RemoveMember(projectId);
-                await Clients.Group(GroupName(projectId)).SendAsync("PresenceUpdated", GetProjectPresence(projectId));
-                await Clients.OthersInGroup(GroupName(projectId)).SendAsync("ActivityUpdated", CreateActivity("left the project"));
+                var cleanId = projectId.Trim().ToLowerInvariant();
+                RemoveMember(cleanId);
+                await Clients.Group(GroupName(cleanId)).SendAsync("PresenceUpdated", GetProjectPresence(cleanId));
+                await Clients.OthersInGroup(GroupName(cleanId)).SendAsync("ActivityUpdated", CreateActivity("left the project"));
             }
         }
 
@@ -116,12 +129,15 @@ public class ProjectCollaborationHub : Hub
         {
             return false;
         }
-
-        return await _projectStore.GetProjectAsync(projectId, CurrentEmail()) is not null;
+        var cleanId = projectId.Trim().ToLowerInvariant();
+        return await _projectStore.GetProjectAsync(cleanId, CurrentEmail()) is not null;
     }
 
     private bool HasJoined(string projectId)
     {
+        if (string.IsNullOrWhiteSpace(projectId)) return false;
+        var cleanId = projectId.Trim().ToLowerInvariant();
+
         if (!JoinedProjects.TryGetValue(Context.ConnectionId, out var projects))
         {
             return false;
@@ -129,7 +145,7 @@ public class ProjectCollaborationHub : Hub
 
         lock (projects)
         {
-            return projects.Contains(projectId);
+            return projects.Contains(cleanId);
         }
     }
 
@@ -152,7 +168,8 @@ public class ProjectCollaborationHub : Hub
 
     private void RemoveMember(string projectId)
     {
-        if (!ProjectMembers.TryGetValue(projectId, out var members))
+        var cleanId = projectId.Trim().ToLowerInvariant();
+        if (!ProjectMembers.TryGetValue(cleanId, out var members))
         {
             return;
         }
@@ -160,13 +177,14 @@ public class ProjectCollaborationHub : Hub
         members.TryRemove(Context.ConnectionId, out _);
         if (members.IsEmpty)
         {
-            ProjectMembers.TryRemove(projectId, out _);
+            ProjectMembers.TryRemove(cleanId, out _);
         }
     }
 
     private static object[] GetProjectPresence(string projectId)
     {
-        if (!ProjectMembers.TryGetValue(projectId, out var members))
+        var cleanId = projectId.Trim().ToLowerInvariant();
+        if (!ProjectMembers.TryGetValue(cleanId, out var members))
         {
             return [];
         }
@@ -196,7 +214,7 @@ public class ProjectCollaborationHub : Hub
 
     private static string GroupName(string projectId)
     {
-        return $"project:{projectId}";
+        return $"project:{projectId?.Trim().ToLowerInvariant()}";
     }
 
     private sealed record MemberPresence(string Email, string Color);

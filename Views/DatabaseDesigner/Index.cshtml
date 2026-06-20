@@ -337,6 +337,9 @@
     const initialSchema = @Html.Raw(initialSchemaJson);
     const currentProjectId = @Html.Raw(currentProjectIdJson);
     const currentUserEmail = @Html.Raw(currentUserEmailJson);
+    const projectOwnerEmail = '@Html.Raw(Model.Projects.FirstOrDefault(p => p.Id == Model.CurrentProjectId)?.OwnerEmail ?? "")';
+    const collaboratorEmails = @Html.Raw(JsonSerializer.Serialize(Model.CollaboratorEmails, jsonOptions));
+    const allProjectMembers = Array.from(new Set([projectOwnerEmail, ...collaboratorEmails].filter(Boolean)));
     const canvasSize = { width: 1800, height: 1200 };
     const tableWidth = 214;
     const headerHeight = 50;
@@ -465,26 +468,38 @@
     }
 
     function normalizeSchema(schema) {
+        if (!schema) schema = {};
+        const getProp = (obj, prop) => {
+            if (!obj) return undefined;
+            if (obj[prop] !== undefined) return obj[prop];
+            const upper = prop.charAt(0).toUpperCase() + prop.slice(1);
+            return obj[upper];
+        };
+
+        const tablesRaw = getProp(schema, 'tables') || [];
         state.schema = {
-            projectName: schema.projectName || elements.projectName.value || 'GeneratedMvcApp',
-            tables: (schema.tables || []).map((table, tableIndex) => ({
-                id: table.id || uid(),
-                name: table.name ?? `table_${tableIndex + 1}`,
-                lastValidName: table.lastValidName || table.name || `table_${tableIndex + 1}`,
-                x: Number.isFinite(Number(table.x)) ? Number(table.x) : 85 + (tableIndex % 3) * 330,
-                y: Number.isFinite(Number(table.y)) ? Number(table.y) : 55 + Math.floor(tableIndex / 3) * 220,
-                columns: (table.columns || []).map((column, columnIndex) => ({
-                    id: column.id || uid(),
-                    name: column.name || `column_${columnIndex + 1}`,
-                    sqlType: column.sqlType || 'nvarchar(255)',
-                    isPrimaryKey: Boolean(column.isPrimaryKey),
-                    isNullable: column.isPrimaryKey ? false : column.isNullable !== false,
-                    isUnique: Boolean(column.isUnique),
-                    foreignKeyTable: column.foreignKeyTable || '',
-                    foreignKeyColumn: column.foreignKeyColumn || '',
-                    order: Number.isFinite(Number(column.order)) ? Number(column.order) : columnIndex
-                }))
-            }))
+            projectName: getProp(schema, 'projectName') || elements.projectName.value || 'GeneratedMvcApp',
+            tables: tablesRaw.map((table, tableIndex) => {
+                const colsRaw = getProp(table, 'columns') || [];
+                return {
+                    id: getProp(table, 'id') || uid(),
+                    name: getProp(table, 'name') ?? `table_${tableIndex + 1}`,
+                    lastValidName: getProp(table, 'lastValidName') || getProp(table, 'name') || `table_${tableIndex + 1}`,
+                    x: Number.isFinite(Number(getProp(table, 'x'))) ? Number(getProp(table, 'x')) : 85 + (tableIndex % 3) * 330,
+                    y: Number.isFinite(Number(getProp(table, 'y'))) ? Number(getProp(table, 'y')) : 55 + Math.floor(tableIndex / 3) * 220,
+                    columns: colsRaw.map((column, columnIndex) => ({
+                        id: getProp(column, 'id') || uid(),
+                        name: getProp(column, 'name') || `column_${columnIndex + 1}`,
+                        sqlType: getProp(column, 'sqlType') || 'nvarchar(255)',
+                        isPrimaryKey: Boolean(getProp(column, 'isPrimaryKey')),
+                        isNullable: getProp(column, 'isPrimaryKey') ? false : getProp(column, 'isNullable') !== false,
+                        isUnique: Boolean(getProp(column, 'isUnique')),
+                        foreignKeyTable: getProp(column, 'foreignKeyTable') || '',
+                        foreignKeyColumn: getProp(column, 'foreignKeyColumn') || '',
+                        order: Number.isFinite(Number(getProp(column, 'order'))) ? Number(getProp(column, 'order')) : columnIndex
+                    }))
+                };
+            })
         };
         elements.projectName.value = state.schema.projectName;
         if (state.schema.tables.length === 0) {
@@ -549,17 +564,22 @@
 
     function renderTeamPresence(members = collaboration.members) {
         collaboration.members = Array.isArray(members) ? members : [];
-        const uniqueMembers = collaboration.members.filter(member => member?.email);
-        elements.teamLiveCount.textContent = `${uniqueMembers.length} online`;
-        elements.teamLiveMembers.innerHTML = uniqueMembers.length === 0
-            ? '<span class="team-live-empty">Waiting for project members</span>'
-            : uniqueMembers.map(member => `
-                <span class="team-member-chip" title="${escapeHtml(displayEmail(member.email))}">
-                    <i style="--member-color: ${escapeHtml(member.color || colorFromEmail(member.email))}"></i>
-                    ${escapeHtml(shortEmail(member.email))}
-                    ${Number(member.sessions) > 1 ? `<em>${Number(member.sessions)}</em>` : ''}
-                </span>
-            `).join('');
+        const onlineEmails = new Set(collaboration.members.map(m => (m?.email || '').toLowerCase()));
+        
+        elements.teamLiveCount.textContent = `${onlineEmails.size} online`;
+        elements.teamLiveMembers.innerHTML = allProjectMembers.length === 0
+            ? '<span class="team-live-empty">No members</span>'
+            : allProjectMembers.map(email => {
+                const isOnline = onlineEmails.has(email.toLowerCase());
+                const dotColor = isOnline ? '#10b981' : '#ef4444';
+                const dotShadow = isOnline ? '0 0 0 3px rgba(16, 185, 129, 0.25)' : '0 0 0 3px rgba(239, 68, 68, 0.2)';
+                return `
+                    <span class="team-member-chip ${isOnline ? 'online' : 'offline'}" title="${escapeHtml(displayEmail(email))}">
+                        ${escapeHtml(shortEmail(email))}
+                        <i style="--member-color: ${dotColor}; box-shadow: ${dotShadow}; margin-left: 4px;"></i>
+                    </span>
+                `;
+            }).join('');
     }
 
     function renderTeamActivities() {
@@ -611,9 +631,14 @@
 
     function applyRemoteSchema(schema, email) {
         state.applyingRemoteUpdate = true;
-        normalizeSchema(schema || { projectName: 'GeneratedMvcApp', tables: [] });
-        render();
-        state.applyingRemoteUpdate = false;
+        try {
+            normalizeSchema(schema || { projectName: 'GeneratedMvcApp', tables: [] });
+            render();
+        } catch (error) {
+            console.error("Error applying remote schema:", error);
+        } finally {
+            state.applyingRemoteUpdate = false;
+        }
         elements.canvasTipText.textContent = `Updated by ${email || 'teammate'}.`;
     }
 
