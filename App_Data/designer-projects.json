@@ -284,10 +284,9 @@
           ]
         }
       ],
-      "includeMockData": false,
-      "connectionString": null
+      "includeMockData": false
     },
     "createdAt": "2026-06-18T15:06:10.4290114+00:00",
-    "updatedAt": "2026-06-18T18:09:46.294575+00:00"
+    "updatedAt": "2026-06-19T02:32:07.7017296+00:00"
   }
 ]

@@ -18,7 +18,7 @@ public sealed class AspNetMvcExportService
         {
             AddEntry(archive, $"{projectName}/{projectName}.csproj", GenerateProjectFile());
             AddEntry(archive, $"{projectName}/Program.cs", GenerateProgram(projectName));
-            AddEntry(archive, $"{projectName}/appsettings.json", GenerateAppSettings(projectName));
+            AddEntry(archive, $"{projectName}/appsettings.json", GenerateAppSettings(projectName, schema.ConnectionString));
             AddEntry(archive, $"{projectName}/appsettings.Development.json", GenerateDevelopmentAppSettings());
             AddEntry(archive, $"{projectName}/Dockerfile", GenerateDockerfile(projectName));
             AddEntry(archive, $"{projectName}/docker-compose.yml", GenerateDockerCompose(projectName));
@@ -52,6 +52,7 @@ public sealed class AspNetMvcExportService
         var schema = new DatabaseSchema
         {
             ProjectName = ToSafeIdentifier(inputSchema.ProjectName, "GeneratedMvcApp"),
+            ConnectionString = inputSchema.ConnectionString,
             Tables = inputSchema.Tables
                 .Where(table => !string.IsNullOrWhiteSpace(table.Name))
                 .Select(table => new SchemaTable
@@ -166,12 +167,18 @@ app.Run();
 """;
     }
 
-    private static string GenerateAppSettings(string projectName)
+    private static string GenerateAppSettings(string projectName, string connectionString)
     {
+        var cs = string.IsNullOrWhiteSpace(connectionString)
+            ? $"Server=103.72.56.55,2025;Database={projectName}Db;User Id=sa;Password=!Pass123;TrustServerCertificate=True;MultipleActiveResultSets=true"
+            : connectionString;
+
+        var escapedCs = cs.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
         return $$"""
 {
   "ConnectionStrings": {
-    "DefaultConnection": "Server=103.72.56.55,2025;Database={{projectName}}Db;User Id=sa;Password=!Pass123;TrustServerCertificate=True;MultipleActiveResultSets=true"
+    "DefaultConnection": "{{escapedCs}}"
   },
   "Logging": {
     "LogLevel": {

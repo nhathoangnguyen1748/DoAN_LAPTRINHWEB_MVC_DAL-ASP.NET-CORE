@@ -1,155 +1,287 @@
 @model DoAnLapTrinhWeb.Models.Projects.ProjectsIndexViewModel
 
 @{
-    ViewData["Title"] = "Projects";
+    ViewData["Title"] = "Projects Workspace";
     ViewData["BodyClass"] = "projects-page";
     var ownedCount = Model.Projects.Count(project => project.IsOwner);
     var sharedCount = Model.Projects.Count - ownedCount;
     var totalTables = Model.Projects.Sum(project => project.TableCount);
 }
 
-<section class="projects-shell">
+<div class="projects-shell">
     <header class="projects-header">
-        <div class="projects-title">
-            <p class="section-kicker">Workspace</p>
-            <h1>Project manager</h1>
-            <p>@Model.UserEmail</p>
+        <div class="projects-header-left">
+            <a class="back-designer-btn" asp-controller="DatabaseDesigner" asp-action="Index" title="Back to database designer">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                    <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+            </a>
+            <div class="projects-title-container">
+                <div class="projects-title">
+                    <p class="section-kicker">Workspace Manager</p>
+                    <h1>Project Manager</h1>
+                </div>
+                <div class="user-badge">
+                    <div class="user-avatar-initial">@(!string.IsNullOrEmpty(Model.UserEmail) ? Model.UserEmail.Substring(0, 1).ToUpper() : "U")</div>
+                    <span class="user-email-text">@Model.UserEmail</span>
+                </div>
+            </div>
         </div>
         <div class="projects-header-actions">
             <form asp-controller="Account" asp-action="Logout" method="post">
-                <button class="btn btn-light" type="submit">Logout</button>
+                <button class="btn btn-logout" type="submit">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                    Logout
+                </button>
             </form>
         </div>
     </header>
 
-    <section class="project-overview">
-        <div class="project-stat">
-            <span>Total projects</span>
-            <strong>@Model.Projects.Count</strong>
-        </div>
-        <div class="project-stat">
-            <span>Owned</span>
-            <strong>@ownedCount</strong>
-        </div>
-        <div class="project-stat">
-            <span>Shared</span>
-            <strong>@sharedCount</strong>
-        </div>
-        <div class="project-stat">
-            <span>Tables</span>
-            <strong>@totalTables</strong>
-        </div>
-    </section>
+    <div class="projects-layout-container">
+        <!-- Sidebar: Form tạo mới & Stats -->
+        <aside class="projects-sidebar">
+            <section class="project-create-panel">
+                <div class="panel-heading">
+                    <div class="panel-icon-box">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="section-kicker">New Project</p>
+                        <h2>Create Workspace</h2>
+                    </div>
+                </div>
+                
+                <form asp-controller="Projects" asp-action="Create" method="post" class="project-create-form">
+                    <div class="form-group">
+                        <label for="projectNameInput">Project name</label>
+                        <input id="projectNameInput" class="text-input" name="name" placeholder="e.g., WebBanHang ERD" required autocomplete="off" />
+                    </div>
+                    <button class="btn btn-primary btn-create" type="submit">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                            <polyline points="7 3 7 8 15 8"></polyline>
+                        </svg>
+                        Create project
+                    </button>
+                </form>
+            </section>
 
-    <section class="project-create-panel">
-        <div>
-            <p class="section-kicker">New project</p>
-            <h2>Create a database workspace</h2>
-        </div>
-        <form asp-controller="Projects" asp-action="Create" method="post" class="project-create-form">
-            <label>
-                <span>Project name</span>
-                <input class="text-input" name="name" placeholder="VD: WebBanHang ERD" required />
-            </label>
-            <button class="btn btn-primary" type="submit">Create project</button>
-        </form>
-    </section>
+            <section class="project-overview">
+                <div class="panel-heading">
+                    <div class="panel-icon-box stats-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="20" x2="18" y2="10"></line>
+                            <line x1="12" y1="20" x2="12" y2="4"></line>
+                            <line x1="6" y1="20" x2="6" y2="14"></line>
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="section-kicker">Stats</p>
+                        <h2>Stats Overview</h2>
+                    </div>
+                </div>
+                <div class="stats-grid">
+                    <div class="project-stat stat-total">
+                        <span class="stat-title">Total projects</span>
+                        <strong class="stat-value">@Model.Projects.Count</strong>
+                    </div>
+                    <div class="project-stat stat-owned">
+                        <span class="stat-title">Owned</span>
+                        <strong class="stat-value text-green">@ownedCount</strong>
+                    </div>
+                    <div class="project-stat stat-shared">
+                        <span class="stat-title">Shared</span>
+                        <strong class="stat-value text-amber">@sharedCount</strong>
+                    </div>
+                    <div class="project-stat stat-tables">
+                        <span class="stat-title">Total tables</span>
+                        <strong class="stat-value text-blue">@totalTables</strong>
+                    </div>
+                </div>
+            </section>
+        </aside>
 
-    @if (Model.Projects.Count == 0)
-    {
-        <section class="empty-projects">
-            <div>
-                <p class="section-kicker">Empty workspace</p>
-                <h2>No projects yet</h2>
-                <p>Create your first ER project, then invite teammates by Google email.</p>
-            </div>
-        </section>
-    }
-    else
-    {
-        <section class="project-list-header">
-            <div>
-                <p class="section-kicker">Project list</p>
-                <h2>Recent workspaces</h2>
-            </div>
-        </section>
-
-        <div class="project-grid">
-            @foreach (var project in Model.Projects)
+        <!-- Main section: Danh sách workspaces -->
+        <main class="projects-main">
+            @if (Model.Projects.Count == 0)
             {
-                <article class="project-card">
-                    <div class="project-card-top">
-                        <div class="project-name-block">
-                            <span class="project-state @(project.IsOwner ? "owner" : "shared")">@(project.IsOwner ? "Owner" : "Shared")</span>
-                            <h2>@project.Name</h2>
-                            <p>@(project.IsOwner ? "You manage this project" : $"Shared by {project.OwnerEmail}")</p>
-                        </div>
-                        <div class="project-table-count">
-                            <strong>@project.TableCount</strong>
-                            <span>tables</span>
-                        </div>
+                <section class="empty-projects">
+                    <div class="empty-icon-box">
+                        <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                        </svg>
                     </div>
-
-                    <div class="project-meta">
-                        <span>Updated @project.UpdatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm")</span>
-                        <span>@project.CollaboratorEmails.Count Gmail collaborator(s)</span>
+                    <div class="empty-text">
+                        <p class="section-kicker">Empty workspace</p>
+                        <h2>No projects yet</h2>
+                        <p>Create your first ER project, then invite teammates by Google email.</p>
                     </div>
-
-                    <div class="project-actions">
-                        <a class="btn btn-primary" asp-controller="DatabaseDesigner" asp-action="Index" asp-route-projectId="@project.Id">Open designer</a>
-                        @if (project.IsOwner)
-                        {
-                            <form asp-controller="Projects" asp-action="Delete" method="post" onsubmit="return confirm('Delete this project?');">
-                                <input type="hidden" name="id" value="@project.Id" />
-                                <button class="btn btn-danger" type="submit">Delete</button>
-                            </form>
-                        }
+                </section>
+            }
+            else
+            {
+                <div class="project-list-header">
+                    <div>
+                        <p class="section-kicker">Project list</p>
+                        <h2>Recent Workspaces</h2>
                     </div>
+                </div>
 
-                    @if (project.IsOwner)
+                <div class="project-grid">
+                    @foreach (var project in Model.Projects)
                     {
-                        <div class="collab-panel">
-                            <div class="collab-panel-heading">
-                                <strong>Collaborators</strong>
-                                <span>@project.CollaboratorEmails.Count</span>
+                        <article class="project-card">
+                            <div class="project-card-top">
+                                <div class="project-title-area">
+                                    <div class="project-badge-row">
+                                        <span class="project-state @(project.IsOwner ? "owner" : "shared")">
+                                            @(project.IsOwner ? "Owner" : "Shared")
+                                        </span>
+                                    </div>
+                                    <h2>@project.Name</h2>
+                                    <p class="project-owner-desc">
+                                        @(project.IsOwner ? "You manage this project" : $"Shared by {project.OwnerEmail}")
+                                    </p>
+                                </div>
+                                <div class="project-table-count">
+                                    <strong>@project.TableCount</strong>
+                                    <span>tables</span>
+                                </div>
                             </div>
-                            <form asp-controller="Projects" asp-action="AddCollaborator" method="post" class="collab-form">
-                                <input type="hidden" name="id" value="@project.Id" />
-                                <input class="text-input" name="email" type="email" placeholder="teammate@gmail.com" required />
-                                <button class="btn btn-light" type="submit">Add Gmail</button>
-                            </form>
 
-                            @if (project.CollaboratorEmails.Count > 0)
+                            <div class="project-meta">
+                                <span class="meta-item">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <polyline points="12 6 12 12 16 14"></polyline>
+                                    </svg>
+                                    Updated @project.UpdatedAt.LocalDateTime.ToString("dd/MM/yyyy HH:mm")
+                                </span>
+                                <span class="meta-item">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                        <circle cx="9" cy="7" r="4"></circle>
+                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                    </svg>
+                                    @project.CollaboratorEmails.Count collaborator(s)
+                                </span>
+                            </div>
+
+                            <div class="project-actions">
+                                <a class="btn btn-primary btn-open-designer" asp-controller="DatabaseDesigner" asp-action="Index" asp-route-projectId="@project.Id">
+                                    <span>Open designer</span>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                                        <polyline points="12 5 19 12 12 19"></polyline>
+                                    </svg>
+                                </a>
+                                @if (project.IsOwner)
+                                {
+                                    <form asp-controller="Projects" asp-action="Delete" method="post" onsubmit="return confirm('Delete this project?');" class="delete-project-form">
+                                        <input type="hidden" name="id" value="@project.Id" />
+                                        <button class="btn btn-danger btn-icon-only" type="submit" title="Delete project">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <polyline points="3 6 5 6 21 6"></polyline>
+                                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                                <line x1="10" y1="11" x2="10" y2="17"></line>
+                                                <line x1="14" y1="11" x2="14" y2="17"></line>
+                                            </svg>
+                                        </button>
+                                    </form>
+                                }
+                            </div>
+
+                            @if (project.IsOwner)
                             {
-                                <div class="collaborator-list">
-                                    @foreach (var email in project.CollaboratorEmails)
-                                    {
-                                        <form asp-controller="Projects" asp-action="RemoveCollaborator" method="post" class="collaborator-chip">
+                                <div class="collab-panel">
+                                    <button class="collab-toggle-btn" type="button" onclick="toggleCollabPanel(this)">
+                                        <span>Collaborators (@project.CollaboratorEmails.Count)</span>
+                                        <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                            <polyline points="6 9 12 15 18 9"></polyline>
+                                        </svg>
+                                    </button>
+                                    <div class="collab-content collapsed">
+                                        <form asp-controller="Projects" asp-action="AddCollaborator" method="post" class="collab-form">
                                             <input type="hidden" name="id" value="@project.Id" />
-                                            <input type="hidden" name="email" value="@email" />
-                                            <span>@email</span>
-                                            <button type="submit" aria-label="Remove @email">x</button>
+                                            <div class="input-with-button">
+                                                <input class="text-input text-input-compact" name="email" type="email" placeholder="teammate@gmail.com" required />
+                                                <button class="btn btn-primary btn-add-collab" type="submit">Add</button>
+                                            </div>
                                         </form>
-                                    }
+
+                                        @if (project.CollaboratorEmails.Count > 0)
+                                        {
+                                            <div class="collaborator-list">
+                                                @foreach (var email in project.CollaboratorEmails)
+                                                {
+                                                    <form asp-controller="Projects" asp-action="RemoveCollaborator" method="post" class="collaborator-chip">
+                                                        <input type="hidden" name="id" value="@project.Id" />
+                                                        <input type="hidden" name="email" value="@email" />
+                                                        <span class="collab-email-text">@email</span>
+                                                        <button type="submit" aria-label="Remove @email" class="btn-remove-collab" title="Remove collaborator">
+                                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                                                            </svg>
+                                                        </button>
+                                                    </form>
+                                                }
+                                            </div>
+                                        }
+                                        else
+                                        {
+                                            <p class="collab-empty">No one else has access yet.</p>
+                                        }
+                                    </div>
                                 </div>
                             }
-                            else
+                            else if (project.CollaboratorEmails.Count > 0)
                             {
-                                <p class="collab-empty">No one else has access yet.</p>
+                                <div class="collab-panel">
+                                    <div class="collab-read-only-heading">
+                                        <span>Collaborators:</span>
+                                    </div>
+                                    <div class="collaborator-list read-only">
+                                        @foreach (var email in project.CollaboratorEmails)
+                                        {
+                                            <span class="collaborator-chip-readonly">@email</span>
+                                        }
+                                    </div>
+                                </div>
                             }
-                        </div>
+                        </article>
                     }
-                    else if (project.CollaboratorEmails.Count > 0)
-                    {
-                        <div class="collaborator-list read-only">
-                            @foreach (var email in project.CollaboratorEmails)
-                            {
-                                <span>@email</span>
-                            }
-                        </div>
-                    }
-                </article>
+                </div>
             }
-        </div>
-    }
-</section>
+        </main>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function toggleCollabPanel(button) {
+            const content = button.nextElementSibling;
+            const chevron = button.querySelector('.chevron-icon');
+            
+            if (content.classList.contains('collapsed')) {
+                content.classList.remove('collapsed');
+                chevron.classList.add('rotated');
+            } else {
+                content.classList.add('collapsed');
+                chevron.classList.remove('rotated');
+            }
+        }
+    </script>
+}
