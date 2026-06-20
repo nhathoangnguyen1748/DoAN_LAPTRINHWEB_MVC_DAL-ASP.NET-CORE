@@ -193,11 +193,11 @@
 </div>
 
 <style>
-    .export-dialog-custom { max-width: min(860px, calc(100vw - 28px)); width: 100%; border-radius: 14px; font-family: inherit; display: flex; flex-direction: column; max-height: calc(100vh - 28px); }
+    .export-dialog-custom { max-width: min(940px, calc(100vw - 28px)); width: 100%; border-radius: 14px; font-family: inherit; display: flex; flex-direction: column; max-height: calc(100vh - 28px); }
     .export-dialog-custom .import-dialog-header { background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 14px 18px; }
     .export-dialog-custom .import-dialog-header h2 { margin: 0 0 2px; font-size: 1.1rem; color: #0f172a; font-weight: 700; }
     .export-dialog-custom .import-dialog-header p { margin: 0; font-size: 0.82rem; color: #64748b; }
-    .export-body { padding: 16px 18px; display: grid; grid-template-columns: minmax(220px, 0.9fr) minmax(300px, 1.1fr); gap: 14px; overflow: visible; flex: 1; min-height: 0; }
+    .export-body { padding: 16px 18px; display: grid; grid-template-columns: minmax(220px, 0.9fr) minmax(360px, 1.1fr); gap: 14px; overflow: visible; flex: 1; min-height: 0; }
     .export-field-group { display: flex; flex-direction: column; gap: 6px; }
     .export-field-group label { font-size: 0.74rem; font-weight: 700; color: #334155; text-transform: uppercase; letter-spacing: 0.4px; }
     .export-input { width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.9rem; color: #0f172a; transition: all 0.2s; background: #fff; }
@@ -214,6 +214,9 @@
     
     .export-dynamic-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; animation: slideDown 0.2s ease-out forwards; }
     .export-dynamic-box .export-field-group + .export-field-group { margin-top: 10px; }
+    .export-field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 10px; align-items: start; }
+    .export-field-grid .export-field-group { min-width: 0; margin-top: 0; }
+    .export-dynamic-box .export-field-grid .export-field-group + .export-field-group { margin-top: 0; }
     .export-config-column { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
     .export-footer { padding: 12px 18px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 10px; flex-shrink: 0; }
     .export-btn { padding: 9px 16px; border-radius: 8px; font-weight: 700; font-size: 0.9rem; cursor: pointer; transition: all 0.2s; border: none; display: flex; align-items: center; justify-content: center; }
@@ -283,8 +286,28 @@
             <div class="export-config-column">
                 <div id="localConfigFields" class="export-dynamic-box" style="display: block;">
                     <div class="export-field-group">
-                        <label for="localServerName">SQL Server Instance</label>
-                        <input type="text" id="localServerName" class="export-input" placeholder="e.g. localhost\SQLEXPRESS" />
+                        <label for="localServerName">Server Name</label>
+                        <input type="text" id="localServerName" class="export-input" placeholder="e.g. localhost or .\SQLEXPRESS" />
+                    </div>
+                    <div class="export-field-grid">
+                        <div class="export-field-group">
+                            <label for="localPort">Port</label>
+                            <input type="text" id="localPort" class="export-input" placeholder="1433" />
+                        </div>
+                        <div class="export-field-group">
+                            <label for="localDatabaseName">Database Name</label>
+                            <input type="text" id="localDatabaseName" class="export-input" placeholder="e.g. DemoDb" />
+                        </div>
+                    </div>
+                    <div class="export-field-grid">
+                        <div class="export-field-group">
+                            <label for="localLogin">Username</label>
+                            <input type="text" id="localLogin" class="export-input" placeholder="sa" />
+                        </div>
+                        <div class="export-field-group">
+                            <label for="localPassword">Password</label>
+                            <input type="password" id="localPassword" class="export-input" placeholder="********" />
+                        </div>
                     </div>
                 </div>
 
@@ -293,7 +316,7 @@
                         <label for="liveServerName">Server Address / IP</label>
                         <input type="text" id="liveServerName" class="export-input" placeholder="e.g. 103.72.56.55,1433" />
                     </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                    <div class="export-field-grid">
                         <div class="export-field-group">
                             <label for="liveLogin">Username</label>
                             <input type="text" id="liveLogin" class="export-input" placeholder="sa" />
@@ -1791,7 +1814,7 @@
             }
             elements.reviewBtn.classList.remove('loading');
             elements.reviewBtn.disabled = false;
-            elements.reviewBtnText.textContent = 'AI Review Database';
+            elements.reviewBtnText.textContent = 'AI Review';
         }
     }
 
@@ -1860,12 +1883,25 @@
         }
     }
 
+    function toSafeProjectName(projectName) {
+        let safeProjectName = projectName.replace(/[^A-Za-z0-9_]/g, '');
+        if (!safeProjectName) safeProjectName = 'GeneratedMvcApp';
+        if (/^[0-9]/.test(safeProjectName)) safeProjectName = 'Item' + safeProjectName;
+        return safeProjectName;
+    }
+
     async function openExportModal() {
         if (state.schema.tables.length === 0) {
             showToast('Add or import tables before exporting.');
             return;
         }
-        document.getElementById('exportProjectName').value = state.schema.projectName || 'GeneratedMvcApp';
+        const projectName = state.schema.projectName || 'GeneratedMvcApp';
+        const safeProjectName = toSafeProjectName(projectName);
+        document.getElementById('exportProjectName').value = projectName;
+        document.getElementById('localServerName').value ||= 'localhost\\SQLEXPRESS';
+        document.getElementById('localPort').value ||= '1433';
+        document.getElementById('localDatabaseName').value ||= `${safeProjectName}Db`;
+        document.getElementById('localLogin').value ||= 'sa';
         elements.exportConfigOverlay.hidden = false;
     }
 
@@ -1875,29 +1911,32 @@
         const newProjectName = document.getElementById('exportProjectName').value.trim();
         
         if (!newProjectName) {
-            showToast('Vui lòng nhập Project Name.');
+            showToast('Vui long nhap Project Name.');
             return;
         }
 
         state.schema.projectName = newProjectName;
         
-        let safeProjectName = newProjectName.replace(/[^A-Za-z0-9_]/g, '');
-        if (!safeProjectName) safeProjectName = 'GeneratedMvcApp';
-        if (/^[0-9]/.test(safeProjectName)) safeProjectName = 'Item' + safeProjectName;
+        const safeProjectName = toSafeProjectName(newProjectName);
 
         if (mode === 'local') {
             const serverName = document.getElementById('localServerName').value.trim();
-            if (!serverName) {
-                showToast('Vui lòng nhập SQL Server Instance.');
+            const port = document.getElementById('localPort').value.trim();
+            const databaseName = document.getElementById('localDatabaseName').value.trim();
+            const login = document.getElementById('localLogin').value.trim();
+            const password = document.getElementById('localPassword').value.trim();
+            if (!serverName || !port || !databaseName || !login || !password) {
+                showToast('Vui long nhap day du thong tin Local Server (Server Name, Port, Database Name, Username, Password).');
                 return;
             }
-            connectionString = `Server=${serverName};Database=${safeProjectName}Db;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true`;
+            const serverEndpoint = serverName.includes(',') ? serverName : `${serverName},${port}`;
+            connectionString = `Server=${serverEndpoint};Database=${databaseName};User Id=${login};Password=${password};TrustServerCertificate=True;MultipleActiveResultSets=true`;
         } else if (mode === 'live') {
             const serverName = document.getElementById('liveServerName').value.trim();
             const login = document.getElementById('liveLogin').value.trim();
             const password = document.getElementById('livePassword').value.trim();
             if (!serverName || !login || !password) {
-                showToast('Vui lòng nhập đầy đủ thông tin Live Server (Server Address, Username, Password).');
+                showToast('Vui long nhap day du thong tin Live Server (Server Address, Username, Password).');
                 return;
             }
             connectionString = `Server=${serverName};Database=${safeProjectName}Db;User Id=${login};Password=${password};TrustServerCertificate=True;MultipleActiveResultSets=true`;
@@ -1932,7 +1971,7 @@
             showToast(error.message || 'Export failed.');
         } finally {
             elements.exportConfirmBtn.disabled = false;
-            elements.exportConfirmBtn.textContent = 'Export';
+            elements.exportConfirmBtn.textContent = 'Download Project';
         }
     }
 
