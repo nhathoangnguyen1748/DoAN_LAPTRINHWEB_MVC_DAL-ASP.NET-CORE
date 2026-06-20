@@ -1048,7 +1048,7 @@
                             </span>
                         </div>
                         <div class="table-header-actions">
-                            <button class="icon-btn small edit-table-btn" type="button" data-edit-table="${table.id}" aria-label="${isEditing ? 'Done editing' : 'Edit table'}">
+                            <button class="edit-table-icon-btn edit-table-btn" type="button" data-edit-table="${table.id}" aria-label="${isEditing ? 'Done editing' : 'Edit table'}">
                                 ${isEditing ? '✓' : '✏️'}
                             </button>
                             <button class="icon-btn small delete-table-btn" type="button" data-delete-canvas-table="${table.id}" aria-label="Delete table"></button>
@@ -1540,8 +1540,10 @@
         while ((match = createTableRegex.exec(cleaned)) !== null) {
             let cursor = match.index + match[0].length;
             while (cursor < cleaned.length && /\s/.test(cleaned[cursor])) cursor++;
-            if (cleaned.slice(cursor).toUpperCase().startsWith('IF NOT EXISTS')) {
-                cursor += 'IF NOT EXISTS'.length;
+            const remaining = cleaned.slice(cursor);
+            const ifNotExistsMatch = remaining.match(/^IF\s+NOT\s+EXISTS\b/i);
+            if (ifNotExistsMatch) {
+                cursor += ifNotExistsMatch[0].length;
             }
             const name = readIdentifierToken(cleaned, cursor);
             cursor = name.end;
@@ -1611,6 +1613,7 @@
     }
 
     function mergeImportedTables(tables) {
+        const renamedTables = new Map();
         for (const table of tables) {
             const baseName = table.name || 'table';
             let uniqueName = baseName;
@@ -1618,10 +1621,27 @@
             while (state.schema.tables.some(existing => existing.name.toLowerCase() === uniqueName.toLowerCase())) {
                 uniqueName = `${baseName}_${suffix++}`;
             }
+            if (uniqueName.toLowerCase() !== baseName.toLowerCase()) {
+                renamedTables.set(baseName.toLowerCase(), uniqueName);
+            }
             table.name = uniqueName;
             table.lastValidName = uniqueName;
             state.schema.tables.push(table);
         }
+
+        if (renamedTables.size > 0) {
+            for (const table of tables) {
+                for (const col of table.columns) {
+                    if (col.foreignKeyTable) {
+                        const targetLower = col.foreignKeyTable.toLowerCase();
+                        if (renamedTables.has(targetLower)) {
+                            col.foreignKeyTable = renamedTables.get(targetLower);
+                        }
+                    }
+                }
+            }
+        }
+
         if (tables.length) {
             state.selectedTableId = tables[0].id;
             state.selectedColumnId = tables[0].columns[0]?.id || null;

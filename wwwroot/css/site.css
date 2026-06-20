@@ -2433,3 +2433,24 @@ textarea:focus-visible {
   font-family: var(--font-mono);
   font-size: 8px;
 }
+
+
+.edit-table-icon-btn {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 11px;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.edit-table-icon-btn:hover {
+  border-color: rgba(20, 133, 245, 0.5);
+  color: var(--blue-deep);
+  background: var(--blue-soft);
+  transform: none;
+}
