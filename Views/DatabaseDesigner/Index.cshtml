@@ -83,6 +83,15 @@
                         <small>Selected: <span id="canvasSelectedName">none</span></small>
                     </div>
                 </div>
+                <div class="team-live-panel" aria-live="polite">
+                    <div class="team-live-head">
+                        <span class="live-dot"></span>
+                        <strong>Team live</strong>
+                        <small id="teamLiveCount">0 online</small>
+                    </div>
+                    <div id="teamLiveMembers" class="team-live-members"></div>
+                    <div id="teamActivityList" class="team-activity-list"></div>
+                </div>
                 <div class="canvas-badges">
                     <span id="sqlStats" class="soft-pill">0 tables</span>
                     <span id="relationCount" class="soft-pill">0 relations</span>
@@ -364,6 +373,9 @@
         reviewBtn: document.getElementById('reviewBtn'),
         reviewBtnText: document.getElementById('reviewBtnText'),
         canvasTipText: document.getElementById('canvasTipText'),
+        teamLiveCount: document.getElementById('teamLiveCount'),
+        teamLiveMembers: document.getElementById('teamLiveMembers'),
+        teamActivityList: document.getElementById('teamActivityList'),
         exportBtn: document.getElementById('exportBtn'),
         topExportBtn: document.getElementById('topExportBtn'),
         sqlStats: document.getElementById('sqlStats'),
@@ -419,7 +431,10 @@
         schemaTimer: null,
         cursorTimer: null,
         cursorColor: colorFromEmail(currentUserEmail),
-        remoteCursors: new Map()
+        remoteCursors: new Map(),
+        members: [],
+        activities: [],
+        pendingActivity: 'updated the database schema'
     };
 
     function uid() {
@@ -523,12 +538,61 @@
         showToast.timer = setTimeout(() => elements.toast.hidden = true, 3200);
     }
 
+    function displayEmail(email) {
+        return String(email || 'teammate').trim() || 'teammate';
+    }
+
+    function shortEmail(email) {
+        const value = displayEmail(email);
+        return value.includes('@@') ? value.split('@@')[0] : value;
+    }
+
+    function renderTeamPresence(members = collaboration.members) {
+        collaboration.members = Array.isArray(members) ? members : [];
+        const uniqueMembers = collaboration.members.filter(member => member?.email);
+        elements.teamLiveCount.textContent = `${uniqueMembers.length} online`;
+        elements.teamLiveMembers.innerHTML = uniqueMembers.length === 0
+            ? '<span class="team-live-empty">Waiting for project members</span>'
+            : uniqueMembers.map(member => `
+                <span class="team-member-chip" title="${escapeHtml(displayEmail(member.email))}">
+                    <i style="--member-color: ${escapeHtml(member.color || colorFromEmail(member.email))}"></i>
+                    ${escapeHtml(shortEmail(member.email))}
+                    ${Number(member.sessions) > 1 ? `<em>${Number(member.sessions)}</em>` : ''}
+                </span>
+            `).join('');
+    }
+
+    function renderTeamActivities() {
+        elements.teamActivityList.innerHTML = collaboration.activities.length === 0
+            ? '<span class="team-activity-empty">No activity yet</span>'
+            : collaboration.activities.map(item => `
+                <span class="team-activity-item" title="${escapeHtml(displayEmail(item.email))}">
+                    <strong>${escapeHtml(shortEmail(item.email))}</strong>
+                    ${escapeHtml(item.action || 'updated the project')}
+                </span>
+            `).join('');
+    }
+
+    function addTeamActivity(activity) {
+        if (!activity?.email && !activity?.action) return;
+        collaboration.activities = [
+            {
+                email: activity.email || 'teammate',
+                action: activity.action || 'updated the project',
+                at: activity.at || new Date().toISOString()
+            },
+            ...collaboration.activities
+        ].slice(0, 4);
+        renderTeamActivities();
+    }
+
     function collaborationReady() {
         return Boolean(state.projectId && collaboration.connection && collaboration.connection.state === signalR.HubConnectionState.Connected);
     }
 
-    function scheduleSchemaBroadcast(delay = 320) {
+    function scheduleSchemaBroadcast(delay = 320, activity = 'updated the database schema') {
         if (state.applyingRemoteUpdate || !state.projectId || !collaboration.connection) return;
+        collaboration.pendingActivity = activity || collaboration.pendingActivity;
         clearTimeout(collaboration.schemaTimer);
         collaboration.schemaTimer = setTimeout(broadcastSchema, delay);
     }
@@ -536,7 +600,9 @@
     async function broadcastSchema() {
         if (state.applyingRemoteUpdate || !collaborationReady()) return;
         try {
-            await collaboration.connection.invoke('BroadcastSchema', state.projectId, state.schema);
+            const activity = collaboration.pendingActivity || 'updated the database schema';
+            collaboration.pendingActivity = 'updated the database schema';
+            await collaboration.connection.invoke('BroadcastSchema', state.projectId, state.schema, activity);
             elements.canvasTipText.textContent = 'Realtime synced.';
         } catch (error) {
             elements.canvasTipText.textContent = 'Realtime sync paused.';
@@ -597,13 +663,15 @@
 
         collaboration.connection.on('SchemaUpdated', applyRemoteSchema);
         collaboration.connection.on('CursorMoved', updateRemoteCursor);
-        collaboration.connection.on('UserLeft', removeRemoteCursor);
-        collaboration.connection.on('UserJoined', email => {
-            elements.canvasTipText.textContent = `${email} joined this project.`;
+        collaboration.connection.on('PresenceUpdated', renderTeamPresence);
+        collaboration.connection.on('ActivityUpdated', addTeamActivity);
+        collaboration.connection.on('UserLeft', email => {
+            removeRemoteCursor(email);
+            renderTeamPresence(collaboration.members.filter(member => member.email !== email));
         });
         collaboration.connection.onreconnected(async () => {
             try {
-                await collaboration.connection.invoke('JoinProject', state.projectId);
+                await collaboration.connection.invoke('JoinProject', state.projectId, collaboration.cursorColor);
                 elements.canvasTipText.textContent = 'Realtime collaboration reconnected.';
             } catch {
                 elements.canvasTipText.textContent = 'Could not rejoin realtime project.';
@@ -612,7 +680,7 @@
 
         try {
             await collaboration.connection.start();
-            await collaboration.connection.invoke('JoinProject', state.projectId);
+            await collaboration.connection.invoke('JoinProject', state.projectId, collaboration.cursorColor);
             elements.canvasTipText.textContent = 'Realtime collaboration is on.';
         } catch {
             elements.canvasTipText.textContent = 'Realtime collaboration is unavailable.';
@@ -649,7 +717,7 @@
         state.zoom = zoom;
         elements.canvas.style.width = `${Math.ceil(canvasSize.width * zoom)}px`;
         elements.canvas.style.height = `${Math.ceil(canvasSize.height * zoom)}px`;
-        [elements.relationSvg, elements.tableLayer, elements.emptyCanvas].forEach(layer => {
+        [elements.relationSvg, elements.tableLayer, elements.remoteCursorLayer, elements.emptyCanvas].forEach(layer => {
             layer.style.transform = `scale(${zoom})`;
             layer.style.transformOrigin = '0 0';
         });
@@ -879,7 +947,7 @@
         state.selectedTableId = state.schema.tables[0]?.id || null;
         state.selectedColumnId = state.schema.tables[0]?.columns[0]?.id || null;
         render();
-        scheduleSchemaBroadcast();
+        scheduleSchemaBroadcast(320, `deleted table ${tableReferenceName || 'selected table'}`);
     }
 
     function deleteAllTables() {
@@ -890,7 +958,7 @@
         state.selectedColumnId = null;
         state.lastReviewResult = null;
         render();
-        scheduleSchemaBroadcast();
+        scheduleSchemaBroadcast(320, 'deleted all tables');
         showToast('Deleted all tables from the diagram.');
     }
 
@@ -1233,7 +1301,7 @@
         });
 
         render();
-        scheduleSchemaBroadcast();
+        scheduleSchemaBroadcast(320, 'auto arranged the diagram');
     }
 
     function inboundCount(table) {
@@ -1254,7 +1322,7 @@
         state.selectedTableId = table.id;
         state.selectedColumnId = table.columns[0].id;
         render();
-        scheduleSchemaBroadcast();
+        scheduleSchemaBroadcast(320, `added table ${table.name}`);
     }
 
     function addColumn(table) {
@@ -1272,7 +1340,7 @@
         table.columns.push(column);
         state.selectedColumnId = column.id;
         render();
-        scheduleSchemaBroadcast();
+        scheduleSchemaBroadcast(320, `added column ${column.name} to ${table.name}`);
     }
 
     function stripSqlComments(sql) {
@@ -1588,6 +1656,7 @@
             }
 
             autoLayout();
+            scheduleSchemaBroadcast(0, mode === 'overwrite' ? 'imported SQL and overwrote schema' : 'imported SQL and merged tables');
             showToast(mode === 'overwrite'
                 ? `Imported and overwrote schema with ${importedTables.length} tables.`
                 : `Merged ${importedTables.length} new tables into schema.`);
@@ -1601,6 +1670,7 @@
                 }
                 mergeImportedTables(parsedTables);
                 autoLayout();
+                scheduleSchemaBroadcast(0, mode === 'overwrite' ? 'imported SQL and overwrote schema' : 'imported SQL and merged tables');
                 showToast(mode === 'overwrite'
                     ? `Imported and overwrote schema with ${parsedTables.length} tables (local SQL parser).`
                     : `Merged ${parsedTables.length} new tables into schema (local SQL parser).`);
@@ -1708,7 +1778,7 @@
             const result = await response.json();
             normalizeSchema(result.schema || state.schema);
             render();
-            scheduleSchemaBroadcast();
+            scheduleSchemaBroadcast(320, fixAll ? 'applied all AI review fixes' : 'applied an AI review fix');
             state.fixingReview = false;
             showReview(result.review || { issues: [] });
             showToast(result.message || 'Automatic fix applied.');
@@ -1816,7 +1886,7 @@
             column.foreignKeyTable = '';
             column.foreignKeyColumn = '';
             render();
-            scheduleSchemaBroadcast();
+            scheduleSchemaBroadcast(320, `cleared foreign key on ${column.name}`);
             return;
         }
 
@@ -1865,7 +1935,7 @@
             table.columns = table.columns.filter(candidate => candidate.id !== column.id);
             state.selectedColumnId = table.columns[0]?.id || null;
             render();
-            scheduleSchemaBroadcast();
+            scheduleSchemaBroadcast(320, `deleted column ${column.name} from ${table.name}`);
             return;
         }
 
@@ -1920,7 +1990,7 @@
                 table.lastValidName = newName;
             }
             render();
-            scheduleSchemaBroadcast();
+            scheduleSchemaBroadcast(320, `renamed table to ${newName || 'unnamed table'}`);
         }
 
         if (event.target === elements.tableSearchInput) {
@@ -1933,7 +2003,7 @@
             if (!column) return;
             column.name = event.target.value;
             render();
-            scheduleSchemaBroadcast();
+            scheduleSchemaBroadcast(320, `edited column ${column.name || 'unnamed column'}`);
         }
 
         if (event.target.matches('[data-edit-column-type]')) {
@@ -1941,7 +2011,7 @@
             if (!column) return;
             column.sqlType = event.target.value;
             render();
-            scheduleSchemaBroadcast();
+            scheduleSchemaBroadcast(320, `changed type for ${column.name}`);
         }
     });
 
@@ -1953,19 +2023,19 @@
             column.isPrimaryKey = event.target.checked;
             if (column.isPrimaryKey) column.isNullable = false;
             render();
-            scheduleSchemaBroadcast();
+            scheduleSchemaBroadcast(320, `updated primary key on ${column.name}`);
         }
 
         if (event.target.matches('[data-edit-nullable]')) {
             column.isNullable = event.target.checked;
             render();
-            scheduleSchemaBroadcast();
+            scheduleSchemaBroadcast(320, `updated nullable setting on ${column.name}`);
         }
 
         if (event.target.matches('[data-edit-unique]')) {
             column.isUnique = event.target.checked;
             render();
-            scheduleSchemaBroadcast();
+            scheduleSchemaBroadcast(320, `updated unique setting on ${column.name}`);
         }
 
         if (event.target.matches('[data-edit-fk-table]')) {
@@ -1973,13 +2043,13 @@
             const targetTable = state.schema.tables.find(table => table.name === column.foreignKeyTable);
             column.foreignKeyColumn = targetTable?.columns.find(col => col.isPrimaryKey)?.name || targetTable?.columns[0]?.name || '';
             render();
-            scheduleSchemaBroadcast();
+            scheduleSchemaBroadcast(320, `linked ${column.name} to ${column.foreignKeyTable || 'another table'}`);
         }
 
         if (event.target.matches('[data-edit-fk-column]')) {
             column.foreignKeyColumn = event.target.value;
             render();
-            scheduleSchemaBroadcast();
+            scheduleSchemaBroadcast(320, `changed foreign key column for ${column.name}`);
         }
     });
 
@@ -2011,12 +2081,12 @@
         drag.table.y = Math.max(24, Math.min(canvasSize.height - 180, drag.originY + (event.clientY - drag.startY) / state.zoom));
         renderCanvasTables();
         renderRelations();
-        scheduleSchemaBroadcast(90);
+        scheduleSchemaBroadcast(90, `moved table ${drag.table.name}`);
     });
 
     document.addEventListener('pointerup', () => {
         if (state.dragging) {
-            scheduleSchemaBroadcast(0);
+            scheduleSchemaBroadcast(0, `moved table ${state.dragging.table.name}`);
         }
         state.dragging = null;
     });
@@ -2055,6 +2125,8 @@
     elements.canvasViewport.addEventListener('mousemove', broadcastCursor);
 
     normalizeSchema(initialSchema);
+    renderTeamPresence();
+    renderTeamActivities();
     render();
     startCollaboration();
 })();
