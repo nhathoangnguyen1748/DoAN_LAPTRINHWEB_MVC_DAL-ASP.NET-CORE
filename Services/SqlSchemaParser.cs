@@ -449,7 +449,10 @@ public sealed class SqlSchemaParser
             var token = tokens[index].Trim();
             var keyword = token.Trim(',', ';').ToUpperInvariant();
 
-            if (ColumnStopWords.Contains(keyword))
+            var parenIndex = keyword.IndexOf('(');
+            var baseKeyword = parenIndex >= 0 ? keyword[..parenIndex].Trim() : keyword;
+
+            if (ColumnStopWords.Contains(baseKeyword))
             {
                 break;
             }
@@ -641,7 +644,8 @@ public sealed class SqlSchemaParser
 
     private static string NormalizeSqlType(string sqlType)
     {
-        return Regex.Replace(sqlType.Trim(), @"\s+", " ");
+        var cleaned = sqlType.Replace("[", "").Replace("]", "").Replace("\"", "").Replace("`", "");
+        return Regex.Replace(cleaned.Trim(), @"\s+", " ");
     }
 
     private static string NormalizeProjectName(string? projectName)

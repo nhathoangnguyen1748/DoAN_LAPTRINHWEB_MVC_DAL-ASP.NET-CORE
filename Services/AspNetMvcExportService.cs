@@ -702,6 +702,7 @@ body {
     private static string NormalizeSqlServerType(string sqlType)
     {
         var type = string.IsNullOrWhiteSpace(sqlType) ? "nvarchar(255)" : sqlType.Trim().ToLowerInvariant();
+        type = type.Replace("[", "").Replace("]", "").Replace("\"", "").Replace("`", "");
         type = Regex.Replace(type, @"\s+", " ");
 
         if (type is "uuid") return "uniqueidentifier";
