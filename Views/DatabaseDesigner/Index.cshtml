@@ -285,30 +285,41 @@
 
             <div class="export-config-column">
                 <div id="localConfigFields" class="export-dynamic-box" style="display: block;">
+                    <div class="export-field-group" style="margin-bottom: 10px;">
+                        <label for="localAuthType">Authentication</label>
+                        <select id="localAuthType" class="export-input" onchange="const isSql = this.value === 'sql'; document.getElementById('localSqlAuthFields').style.display = isSql ? 'block' : 'none'; document.getElementById('localWinAuthHint').style.display = isSql ? 'none' : 'block';">
+                            <option value="windows">Windows Authentication</option>
+                            <option value="sql">SQL Server Authentication</option>
+                        </select>
+                    </div>
                     <div class="export-field-group">
                         <label for="localServerName">Server Name</label>
                         <input type="text" id="localServerName" class="export-input" placeholder="e.g. localhost or .\SQLEXPRESS" />
                     </div>
-                    <div class="export-field-grid">
-                        <div class="export-field-group">
-                            <label for="localPort">Port</label>
-                            <input type="text" id="localPort" class="export-input" placeholder="1433" />
+                    <div class="export-field-group" style="margin-top: 10px;">
+                        <label for="localDatabaseName">Database Name</label>
+                        <input type="text" id="localDatabaseName" class="export-input" placeholder="e.g. DemoDb" />
+                    </div>
+                    <div id="localSqlAuthFields" style="display: none;">
+                        <div class="export-field-grid">
+                            <div class="export-field-group">
+                                <label for="localLogin">Username</label>
+                                <input type="text" id="localLogin" class="export-input" placeholder="sa" />
+                            </div>
+                            <div class="export-field-group">
+                                <label for="localPassword">Password</label>
+                                <input type="password" id="localPassword" class="export-input" placeholder="********" />
+                            </div>
                         </div>
-                        <div class="export-field-group">
-                            <label for="localDatabaseName">Database Name</label>
-                            <input type="text" id="localDatabaseName" class="export-input" placeholder="e.g. DemoDb" />
+                        <div class="export-field-group" style="margin-top: 10px;">
+                            <label for="localPort">Port (Optional)</label>
+                            <input type="text" id="localPort" class="export-input" placeholder="e.g. 1433" />
                         </div>
                     </div>
-                    <div class="export-field-grid">
-                        <div class="export-field-group">
-                            <label for="localLogin">Username</label>
-                            <input type="text" id="localLogin" class="export-input" placeholder="sa" />
-                        </div>
-                        <div class="export-field-group">
-                            <label for="localPassword">Password</label>
-                            <input type="password" id="localPassword" class="export-input" placeholder="********" />
-                        </div>
-                    </div>
+                    <p id="localWinAuthHint" style="margin: 8px 0 0; font-size: 0.82rem; color: var(--text-secondary, #8892a4); line-height: 1.4; display: block;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px; margin-right: 4px;"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                        Sử dụng Windows Authentication — không cần username/password.
+                    </p>
                 </div>
 
                 <div id="liveConfigFields" class="export-dynamic-box" style="display: none;">
@@ -457,6 +468,10 @@
         exportConfirmBtn: document.getElementById('exportConfirmBtn'),
         exportCancelBtn: document.getElementById('exportCancelBtn'),
         localServerName: document.getElementById('localServerName'),
+        localAuthType: document.getElementById('localAuthType'),
+        localLogin: document.getElementById('localLogin'),
+        localPassword: document.getElementById('localPassword'),
+        localPort: document.getElementById('localPort'),
         liveServerName: document.getElementById('liveServerName'),
         liveLogin: document.getElementById('liveLogin'),
         livePassword: document.getElementById('livePassword')
@@ -1899,9 +1914,17 @@
         const safeProjectName = toSafeProjectName(projectName);
         document.getElementById('exportProjectName').value = projectName;
         document.getElementById('localServerName').value ||= 'localhost\\SQLEXPRESS';
-        document.getElementById('localPort').value ||= '1433';
         document.getElementById('localDatabaseName').value ||= `${safeProjectName}Db`;
-        document.getElementById('localLogin').value ||= 'sa';
+
+        // Reset auth type selection
+        if (elements.localAuthType) {
+            elements.localAuthType.value = 'windows';
+        }
+        const localSqlAuthFields = document.getElementById('localSqlAuthFields');
+        const localWinAuthHint = document.getElementById('localWinAuthHint');
+        if (localSqlAuthFields) localSqlAuthFields.style.display = 'none';
+        if (localWinAuthHint) localWinAuthHint.style.display = 'block';
+
         elements.exportConfigOverlay.hidden = false;
     }
 
@@ -1921,16 +1944,25 @@
 
         if (mode === 'local') {
             const serverName = document.getElementById('localServerName').value.trim();
-            const port = document.getElementById('localPort').value.trim();
             const databaseName = document.getElementById('localDatabaseName').value.trim();
-            const login = document.getElementById('localLogin').value.trim();
-            const password = document.getElementById('localPassword').value.trim();
-            if (!serverName || !port || !databaseName || !login || !password) {
-                showToast('Vui long nhap day du thong tin Local Server (Server Name, Port, Database Name, Username, Password).');
+            if (!serverName || !databaseName) {
+                showToast('Vui lòng nhập Server Name và Database Name.');
                 return;
             }
-            const serverEndpoint = serverName.includes(',') ? serverName : `${serverName},${port}`;
-            connectionString = `Server=${serverEndpoint};Database=${databaseName};User Id=${login};Password=${password};TrustServerCertificate=True;MultipleActiveResultSets=true`;
+            const authType = elements.localAuthType?.value || 'windows';
+            if (authType === 'windows') {
+                connectionString = `Server=${serverName};Database=${databaseName};Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true`;
+            } else {
+                const login = elements.localLogin.value.trim();
+                const password = elements.localPassword.value.trim();
+                const port = elements.localPort.value.trim();
+                if (!login || !password) {
+                    showToast('Vui lòng nhập Username và Password.');
+                    return;
+                }
+                const host = port ? `${serverName},${port}` : serverName;
+                connectionString = `Server=${host};Database=${databaseName};User Id=${login};Password=${password};TrustServerCertificate=True;MultipleActiveResultSets=true`;
+            }
         } else if (mode === 'live') {
             const serverName = document.getElementById('liveServerName').value.trim();
             const login = document.getElementById('liveLogin').value.trim();
