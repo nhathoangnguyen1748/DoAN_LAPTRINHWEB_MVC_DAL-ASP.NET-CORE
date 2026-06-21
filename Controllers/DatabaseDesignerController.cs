@@ -65,8 +65,35 @@ public class DatabaseDesignerController : Controller
     [HttpPost]
     public IActionResult ImportSql([FromBody] SqlImportRequest request)
     {
-        var schema = _parser.Parse(request.Sql, request.ProjectName);
-        return Json(schema);
+        if (request == null || string.IsNullOrWhiteSpace(request.Sql))
+        {
+            return BadRequest(new { message = "Vui lòng nhập câu lệnh SQL trước khi import" });
+        }
+
+        try
+        {
+            var schema = _parser.Parse(request.Sql, request.ProjectName);
+            if (schema == null || schema.Tables == null || schema.Tables.Count == 0)
+            {
+                var hasCreateTableKeyword = System.Text.RegularExpressions.Regex.IsMatch(
+                    request.Sql, 
+                    @"\bCREATE\s+TABLE\b", 
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase
+                );
+
+                if (hasCreateTableKeyword)
+                {
+                    return BadRequest(new { message = "Có lỗi khi phân tích cú pháp SQL, vui lòng kiểm tra lại câu lệnh CREATE TABLE." });
+                }
+
+                return BadRequest(new { message = "Không tìm thấy câu lệnh CREATE TABLE hợp lệ trong đoạn SQL đã nhập. Hệ thống chỉ hỗ trợ phân tích cú pháp CREATE TABLE." });
+            }
+            return Json(schema);
+        }
+        catch (System.Exception)
+        {
+            return BadRequest(new { message = "Có lỗi khi phân tích cú pháp SQL, vui lòng kiểm tra lại câu lệnh CREATE TABLE." });
+        }
     }
 
     [HttpPost]

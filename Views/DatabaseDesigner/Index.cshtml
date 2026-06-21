@@ -148,6 +148,7 @@
         <input id="projectName" class="text-input" value="GeneratedMvcApp" />
         <label class="field-label" for="sqlInput">SQL script</label>
         <textarea id="sqlInput" class="sql-input" spellcheck="false" placeholder="Paste CREATE TABLE statements here..."></textarea>
+        <div id="sqlImportError" style="color: #ef4444; font-size: 0.88rem; margin-top: 2px; margin-bottom: 12px; font-weight: 500;" hidden></div>
         <button id="importSqlBtn" class="btn btn-primary wide" type="button">Import SQL</button>
     </div>
 </div>
@@ -380,6 +381,7 @@
         openSqlModalBtn: document.getElementById('openSqlModalBtn'),
         closeSqlImportBtn: document.getElementById('closeSqlImportBtn'),
         importSqlBtn: document.getElementById('importSqlBtn'),
+        sqlImportError: document.getElementById('sqlImportError'),
         addTableBtn: document.getElementById('addTableBtn'),
         deleteAllTablesBtn: document.getElementById('deleteAllTablesBtn'),
         autoLayoutBtn: document.getElementById('autoLayoutBtn'),
@@ -1028,6 +1030,10 @@
     }
 
     function openSqlImport() {
+        if (elements.sqlImportError) {
+            elements.sqlImportError.hidden = true;
+            elements.sqlImportError.textContent = '';
+        }
         elements.sqlImportOverlay.hidden = false;
         elements.sqlInput.focus();
     }
@@ -1693,29 +1699,54 @@
     }
 
     async function executeImport(mode) {
-        elements.importConfirmOverlay.hidden = true;
-        elements.sqlImportOverlay.hidden = true;
         const sql = elements.sqlInput.value.trim();
+        if (elements.sqlImportError) {
+            elements.sqlImportError.hidden = true;
+            elements.sqlImportError.textContent = '';
+        }
+
         if (!sql) {
-            showToast('Paste SQL before importing.');
+            if (elements.sqlImportError) {
+                elements.sqlImportError.textContent = 'Vui lòng nhập câu lệnh SQL trước khi import';
+                elements.sqlImportError.hidden = false;
+            }
             return;
         }
 
         elements.importSqlBtn.disabled = true;
+        const originalBtnText = elements.importSqlBtn.textContent;
+        elements.importSqlBtn.textContent = 'Importing...';
+
         try {
             const response = await fetch('/DatabaseDesigner/ImportSql', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ sql, projectName: elements.projectName.value })
             });
-            if (!response.ok) throw new Error('Import failed');
+
+            if (!response.ok) {
+                let errMsg = 'Import failed';
+                try {
+                    const errData = await response.json();
+                    if (errData && errData.message) {
+                        errMsg = errData.message;
+                    }
+                } catch (e) {
+                    // ignore
+                }
+                throw new Error(errMsg);
+            }
+
             const importedSchema = await response.json();
             const importedTables = importedSchema.tables || [];
 
             if (importedTables.length === 0) {
-                showToast('No tables found in the provided SQL.');
-                return;
+                throw new Error('Không tìm thấy câu lệnh CREATE TABLE hợp lệ trong đoạn SQL đã nhập. Hệ thống chỉ hỗ trợ phân tích cú pháp CREATE TABLE.');
             }
+
+            // Thành công hoàn toàn -> Ẩn các modal
+            elements.importConfirmOverlay.hidden = true;
+            elements.sqlImportOverlay.hidden = true;
 
             if (mode === 'overwrite') {
                 normalizeSchema(importedSchema);
@@ -1729,30 +1760,34 @@
                 ? `Imported and overwrote schema with ${importedTables.length} tables.`
                 : `Merged ${importedTables.length} new tables into schema.`);
         } catch (error) {
-            const parsedTables = parseSqlToTables(sql);
-            if (!parsedTables.length) {
-                showToast(error.message || 'Import failed.');
-            } else {
-                if (mode === 'overwrite') {
-                    state.schema.tables = [];
-                }
-                mergeImportedTables(parsedTables);
-                autoLayout();
-                scheduleSchemaBroadcast(0, mode === 'overwrite' ? 'imported SQL and overwrote schema' : 'imported SQL and merged tables');
-                showToast(mode === 'overwrite'
-                    ? `Imported and overwrote schema with ${parsedTables.length} tables (local SQL parser).`
-                    : `Merged ${parsedTables.length} new tables into schema (local SQL parser).`);
+            // Không được đóng modal khi xảy ra lỗi. 
+            // Nếu có lỗi, hiển thị lỗi lên div error trong modal Import SQL.
+            // Nếu modal confirm đang hiện, ta ẩn đi và hiện lại modal import
+            elements.importConfirmOverlay.hidden = true;
+            elements.sqlImportOverlay.hidden = false;
+
+            if (elements.sqlImportError) {
+                elements.sqlImportError.textContent = error.message || 'Có lỗi khi phân tích cú pháp SQL, vui lòng kiểm tra lại câu lệnh CREATE TABLE.';
+                elements.sqlImportError.hidden = false;
             }
         } finally {
             elements.importSqlBtn.disabled = false;
+            elements.importSqlBtn.textContent = originalBtnText;
         }
     }
 
     function importSql() {
         const sql = elements.sqlInput.value.trim();
+        if (elements.sqlImportError) {
+            elements.sqlImportError.hidden = true;
+            elements.sqlImportError.textContent = '';
+        }
+
         if (!sql) {
-            showToast('Paste SQL before importing.');
-            openSqlImport();
+            if (elements.sqlImportError) {
+                elements.sqlImportError.textContent = 'Vui lòng nhập câu lệnh SQL trước khi import';
+                elements.sqlImportError.hidden = false;
+            }
             return;
         }
 
@@ -2242,6 +2277,7 @@
     elements.importMergeBtn.addEventListener('click', () => executeImport('merge'));
     elements.importCancelBtn.addEventListener('click', () => {
         elements.importConfirmOverlay.hidden = true;
+        elements.sqlImportOverlay.hidden = false;
     });
     elements.addTableBtn.addEventListener('click', addTable);
     elements.deleteAllTablesBtn.addEventListener('click', deleteAllTables);
